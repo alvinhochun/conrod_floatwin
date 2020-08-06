@@ -1,0 +1,16 @@
+[package]
+name = "conrod_floatwin"
+version = "0.0.1"
+authors = ["Alvin Wong <alvinhochun@gmail.com>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+conrod_core = ">=0.69"
+
+[dev-dependencies]
+conrod_core = "0.70"
+conrod_glium = "0.70"
+conrod_winit = "0.70"
+glium = "0.24"
+winit = "0.19"
