@@ -1,9 +1,9 @@
 use window_frame::WindowFrame;
 
 use conrod_core::{
-    builder_method, cursor,
+    cursor,
     position::{self, Place},
-    widget, widget_ids, Color, Colorable, Position, Positionable, Sizeable, Ui, UiCell, Widget,
+    widget, widget_ids, Colorable, Position, Positionable, Sizeable, Ui, UiCell, Widget,
     WidgetCommon, WidgetStyle,
 };
 
@@ -24,17 +24,7 @@ pub struct State {
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, WidgetStyle)]
-pub struct Style {
-    /// The color of the backdrop rectangle surface.
-    #[conrod(default = "theme.background_color")]
-    pub color: Option<Color>,
-    // /// The width of the border surrounding the backdrop rectangle.
-    // #[conrod(default = "0.0")]
-    // pub border: Option<Scalar>,
-    // /// The color of the backdrop border.
-    // #[conrod(default = "")]
-    // pub border_color: Option<Color>,
-}
+pub struct Style {}
 
 pub struct WindowingState {
     window_rects: Vec<layout::Rect>,
@@ -58,15 +48,10 @@ pub struct WindowSetter {
 
 widget_ids! {
     struct Ids {
-        backdrop,
         window_frames[],
         // window_titles[],
         window_contents[],
     }
-}
-
-impl<'a> Colorable for WindowingArea<'a> {
-    builder_method!(color { style.color = Some(Color) });
 }
 
 impl<'a> WindowingArea<'a> {
@@ -109,22 +94,6 @@ impl<'a> Widget for WindowingArea<'a> {
             windowing_state,
             ..
         } = self;
-
-        // BorderedRectangle widget as the rectangle backdrop.
-        let dim = rect.dim();
-        let color = style.color(ui.theme());
-        // let border = style.border(ui.theme());
-        // let border_color = style.border_color(ui.theme());
-        // widget::BorderedRectangle::new(dim)
-        widget::Rectangle::fill(dim)
-            .color(color)
-            // .border(border)
-            // .border_color(border_color)
-            .middle_of(id)
-            .graphics_for(id)
-            .place_on_kid_area(false)
-            .depth(position::Depth::MAX)
-            .set(state.ids.backdrop, &mut ui);
 
         if state.ids.window_frames.len() != windowing_state.window_rects.len() {
             let target_len = windowing_state.window_rects.len();

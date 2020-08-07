@@ -106,6 +106,7 @@ fn main() {
 
 widget_ids! {
     struct Ids {
+        backdrop,
         windowing_area,
         text,
         button,
@@ -130,9 +131,11 @@ fn set_widgets(
             win_state.add(150.0, 120.0, 100.0, 100.0)
         });
     }
-    let win_ctx: WindowingContext = WindowingArea::new(win_state)
+    widget::Rectangle::fill(ui.window_dim())
         .color(conrod_core::color::LIGHT_GREY)
-        .set(ids.windowing_area, ui);
+        .middle()
+        .set(ids.backdrop, ui);
+    let win_ctx: WindowingContext = WindowingArea::new(win_state).set(ids.windowing_area, ui);
     if let Some(win) = win_ctx.make_window("Test1", win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
