@@ -3,6 +3,8 @@ Conrod FloatWin
 
 A virtual windowing library for [Conrod UI].
 
+![Demo of `conrod_floatwin`](./images/demo.gif)
+
 
 [Conrod UI]: https://github.com/PistonDevelopers/conrod
 
