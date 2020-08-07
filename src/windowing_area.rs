@@ -5,8 +5,8 @@ use window_frame::WindowFrame;
 use conrod_core::{
     cursor,
     position::{self, Place},
-    widget, widget_ids, Colorable, Position, Positionable, Sizeable, Ui, UiCell, Widget,
-    WidgetCommon, WidgetStyle,
+    widget, widget_ids, Position, Positionable, Sizeable, Ui, UiCell, Widget, WidgetCommon,
+    WidgetStyle,
 };
 
 pub mod layout;
@@ -87,7 +87,6 @@ impl<'a> Widget for WindowingArea<'a> {
         } = args;
         let state: &mut conrod_core::widget::State<State> = state;
         let Self {
-            style,
             windowing_state,
             hidpi_factor,
             ..

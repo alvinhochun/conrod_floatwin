@@ -184,7 +184,7 @@ fn set_widgets(
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
                 .scroll_kids();
-            let (container_id, _) = win.set(c, ui);
+            let (_container_id, _) = win.set(c, ui);
         }
     }
     *array_win_count += add_win;
