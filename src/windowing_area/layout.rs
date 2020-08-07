@@ -24,6 +24,7 @@ pub enum HitTest {
 
 pub(crate) const WINDOW_BORDER: f32 = 4.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 20.0;
+pub(crate) const PADDING_BELOW_TITLE_BAR: f32 = 2.0;
 
 enum WindowPartX {
     LeftBorder,

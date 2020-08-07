@@ -115,7 +115,7 @@ impl<'a> Widget for WindowFrame<'a> {
             rect: args
                 .rect
                 .pad(layout::WINDOW_BORDER as Scalar)
-                .pad_top((layout::TITLE_BAR_HEIGHT + layout::WINDOW_BORDER) as Scalar),
+                .pad_top((layout::TITLE_BAR_HEIGHT + layout::PADDING_BELOW_TITLE_BAR) as Scalar),
             pad: conrod_core::position::Padding::none(),
         }
     }
