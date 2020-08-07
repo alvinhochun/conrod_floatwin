@@ -117,6 +117,8 @@ impl<'a> Widget for WindowingArea<'a> {
             });
         }
 
+        windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32]);
+
         let current_input = &ui.global_input().current;
         {
             let mut maybe_drag_start_tuple = state.maybe_drag_start_tuple;
@@ -306,6 +308,9 @@ impl<'a> Widget for WindowingArea<'a> {
                     }
                     _ => {}
                 }
+            }
+            if maybe_drag_start_tuple.is_none() {
+                windowing_state.ensure_all_win_in_area();
             }
         }
 

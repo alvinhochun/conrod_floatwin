@@ -43,6 +43,7 @@ enum WindowPartY {
 pub struct WinId(pub(super) u32);
 
 pub struct WindowingState {
+    area_size: [f32; 2],
     window_rects: Vec<Rect>,
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
@@ -51,9 +52,29 @@ pub struct WindowingState {
 impl WindowingState {
     pub fn new() -> Self {
         Self {
+            area_size: [16_777_216.0, 16_777_216.0],
             window_rects: Vec::new(),
             window_z_orders: Vec::new(),
             bottom_to_top_list: Vec::new(),
+        }
+    }
+
+    pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2]) {
+        self.area_size = area_size;
+    }
+
+    pub(crate) fn ensure_all_win_in_area(&mut self) {
+        for window_rect in self.window_rects.iter_mut() {
+            if window_rect.x < 0.0 {
+                window_rect.x = 0.0;
+            } else if window_rect.x + window_rect.w > self.area_size[0] {
+                window_rect.x = self.area_size[0] - window_rect.w;
+            }
+            if window_rect.y < 0.0 {
+                window_rect.y = 0.0;
+            } else if window_rect.y + window_rect.h > self.area_size[1] {
+                window_rect.y = self.area_size[1] - window_rect.h;
+            }
         }
     }
 
