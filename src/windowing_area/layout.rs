@@ -42,9 +42,9 @@ enum WindowPartY {
 pub struct WinId(pub(super) u32);
 
 pub struct WindowingState {
-    pub(super) window_rects: Vec<Rect>,
-    pub(super) window_z_orders: Vec<u32>,
-    pub(super) bottom_to_top_list: Vec<WinId>,
+    window_rects: Vec<Rect>,
+    window_z_orders: Vec<u32>,
+    bottom_to_top_list: Vec<WinId>,
 }
 
 impl WindowingState {
@@ -102,6 +102,21 @@ impl WindowingState {
 
     pub fn topmost_win(&self) -> Option<WinId> {
         self.bottom_to_top_list.last().copied()
+    }
+
+    pub fn win_rect(&self, win_id: WinId) -> Rect {
+        let WinId(win_idx) = win_id;
+        self.window_rects[win_idx as usize]
+    }
+
+    pub(crate) fn set_win_rect(&mut self, win_id: WinId, rect: Rect) {
+        let WinId(win_idx) = win_id;
+        self.window_rects[win_idx as usize] = rect;
+    }
+
+    pub fn win_z_order(&self, win_id: WinId) -> u32 {
+        let WinId(win_idx) = win_id;
+        self.window_z_orders[win_idx as usize]
     }
 
     pub fn bring_to_top(&mut self, win_id: WinId) {

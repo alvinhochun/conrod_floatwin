@@ -166,15 +166,15 @@ impl<'a> Widget for WindowingArea<'a> {
                                     })
                         };
                         if drag.button == conrod_core::input::MouseButton::Left && is_self_event() {
-                            let topmost_win_idx = windowing_state
+                            let topmost_win_id = windowing_state
                                 .topmost_win()
-                                .map_or_else(|| unreachable!(), |WinId(id)| id as usize);
+                                .unwrap_or_else(|| unreachable!());
                             let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
                                 .unwrap_or_else(|| {
                                     let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
-                                    let win_rect = windowing_state.window_rects[topmost_win_idx];
+                                    let win_rect = windowing_state.win_rect(topmost_win_id);
                                     let ht = windowing_state
-                                        .specific_win_hit_test(WinId(topmost_win_idx as u32), pos)
+                                        .specific_win_hit_test(topmost_win_id, pos)
                                         .map(|ht| {
                                             if is_drag_move_window {
                                                 layout::HitTest::TitleBarOrDragArea
@@ -281,7 +281,7 @@ impl<'a> Widget for WindowingArea<'a> {
                             state.update(|state| {
                                 state.maybe_drag_start_tuple = maybe_drag_start_tuple;
                             });
-                            windowing_state.window_rects[topmost_win_idx] = new_rect;
+                            windowing_state.set_win_rect(topmost_win_id, new_rect);
                         }
                     }
                     conrod_core::event::Ui::Release(
@@ -385,10 +385,10 @@ impl<'a> WindowingContext<'a> {
             None => return None,
         };
         let win_idx = win_id.0 as usize;
-        let window_rect = self.windowing_state.window_rects[win_idx];
+        let window_rect = self.windowing_state.win_rect(win_id);
         let window_frame_id = state.ids.window_frames[win_idx];
         let content_widget_id = state.ids.window_contents[win_idx];
-        let window_depth = -(self.windowing_state.window_z_orders[win_idx] as position::Depth);
+        let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
         let [left, top] = self.windowing_area_rect.top_left();
         let conrod_window_rect = conrod_core::Rect::from_corners(
             [left + window_rect.x as f64, top - window_rect.y as f64],
