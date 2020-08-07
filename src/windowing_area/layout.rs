@@ -68,6 +68,17 @@ impl WindowingState {
         self.window_rects.len()
     }
 
+    pub fn win_hit_test_at_pos(&self, pos: [f32; 2]) -> Option<(WinId, HitTest)> {
+        self.bottom_to_top_list.iter().rev().find_map(|&win| {
+            let win_rect = &self.window_rects[win as usize];
+            let x = pos[0] - win_rect.x;
+            let y = pos[1] - win_rect.y;
+            let w = win_rect.w;
+            let h = win_rect.h;
+            window_hit_test([w, h], [x, y]).map(|ht| (WinId(win), ht))
+        })
+    }
+
     pub fn bring_to_top(&mut self, win_id: WinId) {
         let WinId(win_id) = win_id;
         if *self

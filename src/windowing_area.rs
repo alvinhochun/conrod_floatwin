@@ -1,4 +1,4 @@
-use crate::empty_widget::EmptyWidget;
+use crate::{empty_widget::EmptyWidget, util};
 use layout::{WinId, WindowingState};
 use window_frame::WindowFrame;
 
@@ -132,21 +132,10 @@ impl<'a> Widget for WindowingArea<'a> {
                         let win_under_cursor =
                             if is_drag_move_window {
                                 if *press_id == id {
-                                    // Find the window under the cursor.
+                                    let pos = util::conrod_point_to_layout_pos(*pos, rect);
                                     windowing_state
-                                        .bottom_to_top_list
-                                        .iter()
-                                        .rev()
-                                        .copied()
-                                        .find(|&win| {
-                                            let win_rect =
-                                                &windowing_state.window_rects[win as usize];
-                                            let x = (pos[0] - rect.left()) as f32 - win_rect.x;
-                                            let y = (rect.top() - pos[1]) as f32 - win_rect.y;
-                                            let w = win_rect.w;
-                                            let h = win_rect.h;
-                                            layout::window_hit_test([w, h], [x, y]).is_some()
-                                        })
+                                        .win_hit_test_at_pos(pos)
+                                        .map(|(win_id, _)| win_id)
                                 } else {
                                     None
                                 }
@@ -158,7 +147,7 @@ impl<'a> Widget for WindowingArea<'a> {
                                                 frame_id, *press_id,
                                             )
                                         {
-                                            Some(i as u32)
+                                            Some(WinId(i as u32))
                                         } else {
                                             None
                                         }
@@ -166,7 +155,7 @@ impl<'a> Widget for WindowingArea<'a> {
                                 )
                             };
                         if let Some(win_id) = win_under_cursor {
-                            windowing_state.bring_to_top(WinId(win_id));
+                            windowing_state.bring_to_top(win_id);
                         }
                     }
                     conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
@@ -187,9 +176,10 @@ impl<'a> Widget for WindowingArea<'a> {
                                 as usize;
                             let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
                                 .unwrap_or_else(|| {
+                                    let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
                                     let win_rect = windowing_state.window_rects[topmost_win_idx];
-                                    let x = (drag.origin[0] - rect.left()) as f32 - win_rect.x;
-                                    let y = (rect.top() - drag.origin[1]) as f32 - win_rect.y;
+                                    let x = pos[0] - win_rect.x;
+                                    let y = pos[1] - win_rect.y;
                                     let w = win_rect.w;
                                     let h = win_rect.h;
                                     let ht = layout::window_hit_test([w, h], [x, y]).map(|ht| {
@@ -333,6 +323,7 @@ impl<'a> Widget for WindowingArea<'a> {
                     .widget_capturing_mouse
                     .and_then(|mouse_widget| {
                         // Hit test with the topmost window under the cursor.
+                        let pos = util::conrod_point_to_layout_pos(current_input.mouse.xy, rect);
                         windowing_state
                             .bottom_to_top_list
                             .iter()
@@ -341,10 +332,9 @@ impl<'a> Widget for WindowingArea<'a> {
                                 if mouse_widget == id
                                     || mouse_widget == state.ids.window_frames[win as usize]
                                 {
-                                    let pos = current_input.mouse.xy;
                                     let win_rect = &windowing_state.window_rects[win as usize];
-                                    let x = (pos[0] - rect.left()) as f32 - win_rect.x;
-                                    let y = (rect.top() - pos[1]) as f32 - win_rect.y;
+                                    let x = pos[0] - win_rect.x;
+                                    let y = pos[1] - win_rect.y;
                                     let w = win_rect.w;
                                     let h = win_rect.h;
                                     layout::window_hit_test([w, h], [x, y]).map(|ht| {
