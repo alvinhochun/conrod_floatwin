@@ -170,22 +170,7 @@ impl<'a> Widget for WindowingArea<'a> {
                                 )
                             };
                         if let Some(win_id) = win_under_cursor {
-                            // Bring to top:
-                            if *windowing_state
-                                .bottom_to_top_list
-                                .last()
-                                .expect("There must already be at least one window.")
-                                != win_id
-                            {
-                                let z_order =
-                                    windowing_state.window_z_orders[win_id as usize] as usize;
-                                let subslice = &mut windowing_state.bottom_to_top_list[z_order..];
-                                subslice.rotate_left(1);
-                                for (i, &win) in subslice.iter().enumerate() {
-                                    windowing_state.window_z_orders[win as usize] =
-                                        (i + z_order) as u32;
-                                }
-                            }
+                            windowing_state.bring_to_top(WinId(win_id));
                         }
                     }
                     conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
@@ -437,6 +422,23 @@ impl WindowingState {
         self.window_z_orders.push(id);
         self.bottom_to_top_list.push(id);
         WinId(id)
+    }
+
+    pub fn bring_to_top(&mut self, win_id: WinId) {
+        let WinId(win_id) = win_id;
+        if *self
+            .bottom_to_top_list
+            .last()
+            .expect("There must already be at least one window.")
+            != win_id
+        {
+            let z_order = self.window_z_orders[win_id as usize] as usize;
+            let subslice = &mut self.bottom_to_top_list[z_order..];
+            subslice.rotate_left(1);
+            for (i, &win) in subslice.iter().enumerate() {
+                self.window_z_orders[win as usize] = (i + z_order) as u32;
+            }
+        }
     }
 }
 
