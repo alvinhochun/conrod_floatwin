@@ -68,15 +68,37 @@ impl WindowingState {
         self.window_rects.len()
     }
 
-    pub fn win_hit_test_at_pos(&self, pos: [f32; 2]) -> Option<(WinId, HitTest)> {
+    pub fn win_hit_test(&self, pos: [f32; 2]) -> Option<(WinId, HitTest)> {
         self.bottom_to_top_list.iter().rev().find_map(|&win| {
-            let win_rect = &self.window_rects[win as usize];
-            let x = pos[0] - win_rect.x;
-            let y = pos[1] - win_rect.y;
-            let w = win_rect.w;
-            let h = win_rect.h;
-            window_hit_test([w, h], [x, y]).map(|ht| (WinId(win), ht))
+            let win_id = WinId(win);
+            self.specific_win_hit_test(win_id, pos)
+                .map(|ht| (win_id, ht))
         })
+    }
+
+    pub fn win_hit_test_filtered<F>(&self, pos: [f32; 2], mut f: F) -> Option<(WinId, HitTest)>
+    where
+        F: FnMut(WinId) -> bool,
+    {
+        self.bottom_to_top_list.iter().rev().find_map(|&win| {
+            let win_id = WinId(win);
+            if f(win_id) {
+                self.specific_win_hit_test(win_id, pos)
+                    .map(|ht| (win_id, ht))
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn specific_win_hit_test(&self, win_id: WinId, pos: [f32; 2]) -> Option<HitTest> {
+        let WinId(win_id) = win_id;
+        let win_rect = &self.window_rects[win_id as usize];
+        let x = pos[0] - win_rect.x;
+        let y = pos[1] - win_rect.y;
+        let w = win_rect.w;
+        let h = win_rect.h;
+        window_hit_test([w, h], [x, y])
     }
 
     pub fn bring_to_top(&mut self, win_id: WinId) {
