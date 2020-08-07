@@ -159,18 +159,16 @@ impl<'a> Widget for WindowingArea<'a> {
                     conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
                         let is_self_event = || {
                             *drag_id == id
-                                || windowing_state.bottom_to_top_list.last().map_or(
-                                    false,
-                                    |&WinId(top_win)| {
+                                || windowing_state
+                                    .topmost_win()
+                                    .map_or(false, |WinId(top_win)| {
                                         *drag_id == state.ids.window_frames[top_win as usize]
-                                    },
-                                )
+                                    })
                         };
                         if drag.button == conrod_core::input::MouseButton::Left && is_self_event() {
                             let topmost_win_idx = windowing_state
-                                .bottom_to_top_list
-                                .last()
-                                .map_or_else(|| unreachable!(), |&WinId(id)| id as usize);
+                                .topmost_win()
+                                .map_or_else(|| unreachable!(), |WinId(id)| id as usize);
                             let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
                                 .unwrap_or_else(|| {
                                     let pos = util::conrod_point_to_layout_pos(drag.origin, rect);

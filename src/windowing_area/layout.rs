@@ -100,6 +100,10 @@ impl WindowingState {
         window_hit_test([w, h], [x, y])
     }
 
+    pub fn topmost_win(&self) -> Option<WinId> {
+        self.bottom_to_top_list.last().copied()
+    }
+
     pub fn bring_to_top(&mut self, win_id: WinId) {
         let WinId(win_idx) = win_id;
         if *self
