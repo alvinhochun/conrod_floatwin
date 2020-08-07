@@ -1,5 +1,6 @@
 use window_frame::WindowFrame;
 
+use crate::empty_widget::EmptyWidget;
 use conrod_core::{
     cursor,
     position::{self, Place},
@@ -48,6 +49,7 @@ pub struct WindowSetter {
 
 widget_ids! {
     struct Ids {
+        capture_overlay,
         window_frames[],
         // window_titles[],
         window_contents[],
@@ -95,6 +97,19 @@ impl<'a> Widget for WindowingArea<'a> {
             ..
         } = self;
 
+        let is_drag_move_window =
+            ui.global_input().current.modifiers == conrod_core::input::ModifierKey::ALT;
+        if is_drag_move_window {
+            // Add an empty widget on top for mouse capturing.
+            EmptyWidget::new()
+                .middle_of(id)
+                .graphics_for(id)
+                .place_on_kid_area(false)
+                .wh(rect.dim())
+                .depth(position::Depth::MIN)
+                .set(state.ids.capture_overlay, &mut ui);
+        }
+
         if state.ids.window_frames.len() != windowing_state.window_rects.len() {
             let target_len = windowing_state.window_rects.len();
             state.update(|state| {
@@ -117,28 +132,44 @@ impl<'a> Widget for WindowingArea<'a> {
                     conrod_core::event::Ui::Press(
                         Some(press_id),
                         conrod_core::event::Press {
-                            button: conrod_core::event::Button::Mouse(_, _),
+                            button: conrod_core::event::Button::Mouse(_, pos),
                             ..
                         },
                     ) => {
-                        if let Some(win_id) =
-                            state
-                                .ids
-                                .window_frames
-                                .iter()
-                                .enumerate()
-                                .find_map(|(i, &frame_id)| {
-                                    if frame_id == *press_id
-                                        || ui
-                                            .widget_graph()
-                                            .does_recursive_depth_edge_exist(frame_id, *press_id)
-                                    {
-                                        Some(i as u32)
-                                    } else {
-                                        None
-                                    }
-                                })
-                        {
+                        let win_under_cursor =
+                            if is_drag_move_window {
+                                if *press_id == id {
+                                    // Find the window under the cursor.
+                                    windowing_state.window_z_orders.iter().rev().copied().find(
+                                        |&win| {
+                                            let win_rect =
+                                                &windowing_state.window_rects[win as usize];
+                                            let x = (pos[0] - rect.left()) as f32 - win_rect.x;
+                                            let y = (rect.top() - pos[1]) as f32 - win_rect.y;
+                                            let w = win_rect.w;
+                                            let h = win_rect.h;
+                                            layout::window_hit_test([w, h], [x, y]).is_some()
+                                        },
+                                    )
+                                } else {
+                                    None
+                                }
+                            } else {
+                                state.ids.window_frames.iter().enumerate().find_map(
+                                    |(i, &frame_id)| {
+                                        if frame_id == *press_id
+                                            || ui.widget_graph().does_recursive_depth_edge_exist(
+                                                frame_id, *press_id,
+                                            )
+                                        {
+                                            Some(i as u32)
+                                        } else {
+                                            None
+                                        }
+                                    },
+                                )
+                            };
+                        if let Some(win_id) = win_under_cursor {
                             // Bring to top:
                             if *windowing_state
                                 .bottom_to_top_list
@@ -158,14 +189,16 @@ impl<'a> Widget for WindowingArea<'a> {
                         }
                     }
                     conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
-                        if drag.button == conrod_core::input::MouseButton::Left
-                            && windowing_state
-                                .bottom_to_top_list
-                                .last()
-                                .map_or(false, |&top_win| {
-                                    *drag_id == state.ids.window_frames[top_win as usize]
-                                })
-                        {
+                        let is_self_event = || {
+                            *drag_id == id
+                                || windowing_state.bottom_to_top_list.last().map_or(
+                                    false,
+                                    |&top_win| {
+                                        *drag_id == state.ids.window_frames[top_win as usize]
+                                    },
+                                )
+                        };
+                        if drag.button == conrod_core::input::MouseButton::Left && is_self_event() {
                             let topmost_win_idx = *windowing_state
                                 .bottom_to_top_list
                                 .last()
@@ -174,13 +207,18 @@ impl<'a> Widget for WindowingArea<'a> {
                             let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
                                 .unwrap_or_else(|| {
                                     let win_rect = windowing_state.window_rects[topmost_win_idx];
-                                    let x = (drag.origin[0] - rect.left()) as f32 - win_rect.x;
-                                    let y = (rect.top() - drag.origin[1]) as f32 - win_rect.y;
-                                    let w = win_rect.w;
-                                    let h = win_rect.h;
-                                    let ht = layout::window_hit_test([w, h], [x, y]);
-                                    eprintln!("drag start on {:?}", ht);
-                                    (ht, win_rect)
+                                    if is_drag_move_window {
+                                        eprintln!("window drag start");
+                                        (Some(layout::HitTest::TitleBarOrDragArea), win_rect)
+                                    } else {
+                                        let x = (drag.origin[0] - rect.left()) as f32 - win_rect.x;
+                                        let y = (rect.top() - drag.origin[1]) as f32 - win_rect.y;
+                                        let w = win_rect.w;
+                                        let h = win_rect.h;
+                                        let ht = layout::window_hit_test([w, h], [x, y]);
+                                        eprintln!("drag start on {:?}", ht);
+                                        (ht, win_rect)
+                                    }
                                 });
                             // TODO: Make these configurable:
                             let min_w = 2.0 * 2.0 + 50.0;
@@ -188,7 +226,7 @@ impl<'a> Widget for WindowingArea<'a> {
                             let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
                             let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
                             let new_rect = match drag_start_hit_test {
-                                Some(layout::HitTest::TitleBar) => {
+                                Some(layout::HitTest::TitleBarOrDragArea) => {
                                     let new_x = drag_start_rect.x + drag_delta_x;
                                     let new_y = drag_start_rect.y + drag_delta_y;
                                     layout::Rect {
@@ -317,21 +355,41 @@ impl<'a> Widget for WindowingArea<'a> {
                             .bottom_to_top_list
                             .iter()
                             .rev()
-                            .find(|&&win| mouse_widget == state.ids.window_frames[win as usize])
-                            .and_then(|&win| {
-                                let mouse = &current_input.mouse;
-                                let win_rect = &windowing_state.window_rects[win as usize];
-                                let x = (mouse.xy[0] - rect.left()) as f32 - win_rect.x;
-                                let y = (rect.top() - mouse.xy[1]) as f32 - win_rect.y;
-                                let w = win_rect.w;
-                                let h = win_rect.h;
-                                layout::window_hit_test([w, h], [x, y])
+                            .find_map(|&win| {
+                                if is_drag_move_window {
+                                    // Find the window under the cursor.
+                                    let pos = current_input.mouse.xy;
+                                    windowing_state
+                                        .window_z_orders
+                                        .iter()
+                                        .rev()
+                                        .find_map(|&win| {
+                                            let win_rect =
+                                                &windowing_state.window_rects[win as usize];
+                                            let x = (pos[0] - rect.left()) as f32 - win_rect.x;
+                                            let y = (rect.top() - pos[1]) as f32 - win_rect.y;
+                                            let w = win_rect.w;
+                                            let h = win_rect.h;
+                                            layout::window_hit_test([w, h], [x, y])
+                                        })
+                                        .map(|_| layout::HitTest::TitleBarOrDragArea)
+                                } else if mouse_widget == state.ids.window_frames[win as usize] {
+                                    let mouse = &current_input.mouse;
+                                    let win_rect = &windowing_state.window_rects[win as usize];
+                                    let x = (mouse.xy[0] - rect.left()) as f32 - win_rect.x;
+                                    let y = (rect.top() - mouse.xy[1]) as f32 - win_rect.y;
+                                    let w = win_rect.w;
+                                    let h = win_rect.h;
+                                    layout::window_hit_test([w, h], [x, y])
+                                } else {
+                                    None
+                                }
                             })
                     })
             })
             .and_then(|ht| match ht {
                 layout::HitTest::Content => None,
-                layout::HitTest::TitleBar => Some(cursor::MouseCursor::Grab),
+                layout::HitTest::TitleBarOrDragArea => Some(cursor::MouseCursor::Grab),
                 layout::HitTest::TopBorder | layout::HitTest::BottomBorder => {
                     Some(cursor::MouseCursor::ResizeVertical)
                 }

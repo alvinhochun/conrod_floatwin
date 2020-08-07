@@ -9,7 +9,7 @@ pub struct Rect {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HitTest {
     Content,
-    TitleBar,
+    TitleBarOrDragArea,
     TopBorder,
     LeftBorder,
     RightBorder,
@@ -72,6 +72,6 @@ pub fn window_hit_test(window_size: [f32; 2], rel_pos: [f32; 2]) -> Option<HitTe
         (WindowPartX::RightBorder, _) => HitTest::RightBorder,
         (_, WindowPartY::TopBorder) => HitTest::TopBorder,
         (_, WindowPartY::BottomBorder) => HitTest::BottomBorder,
-        _ => HitTest::TitleBar,
+        _ => HitTest::TitleBarOrDragArea,
     })
 }
