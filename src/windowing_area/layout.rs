@@ -44,7 +44,7 @@ pub struct WinId(pub(super) u32);
 pub struct WindowingState {
     pub(super) window_rects: Vec<Rect>,
     pub(super) window_z_orders: Vec<u32>,
-    pub(super) bottom_to_top_list: Vec<u32>,
+    pub(super) bottom_to_top_list: Vec<WinId>,
 }
 
 impl WindowingState {
@@ -60,8 +60,9 @@ impl WindowingState {
         let id = self.window_rects.len() as u32;
         self.window_rects.push(Rect { x, y, w, h });
         self.window_z_orders.push(id);
-        self.bottom_to_top_list.push(id);
-        WinId(id)
+        let win_id = WinId(id);
+        self.bottom_to_top_list.push(win_id);
+        win_id
     }
 
     pub fn win_count(&self) -> usize {
@@ -69,8 +70,7 @@ impl WindowingState {
     }
 
     pub fn win_hit_test(&self, pos: [f32; 2]) -> Option<(WinId, HitTest)> {
-        self.bottom_to_top_list.iter().rev().find_map(|&win| {
-            let win_id = WinId(win);
+        self.bottom_to_top_list.iter().rev().find_map(|&win_id| {
             self.specific_win_hit_test(win_id, pos)
                 .map(|ht| (win_id, ht))
         })
@@ -80,8 +80,7 @@ impl WindowingState {
     where
         F: FnMut(WinId) -> bool,
     {
-        self.bottom_to_top_list.iter().rev().find_map(|&win| {
-            let win_id = WinId(win);
+        self.bottom_to_top_list.iter().rev().find_map(|&win_id| {
             if f(win_id) {
                 self.specific_win_hit_test(win_id, pos)
                     .map(|ht| (win_id, ht))
@@ -102,17 +101,17 @@ impl WindowingState {
     }
 
     pub fn bring_to_top(&mut self, win_id: WinId) {
-        let WinId(win_id) = win_id;
+        let WinId(win_idx) = win_id;
         if *self
             .bottom_to_top_list
             .last()
             .expect("There must already be at least one window.")
             != win_id
         {
-            let z_order = self.window_z_orders[win_id as usize] as usize;
+            let z_order = self.window_z_orders[win_idx as usize] as usize;
             let subslice = &mut self.bottom_to_top_list[z_order..];
             subslice.rotate_left(1);
-            for (i, &win) in subslice.iter().enumerate() {
+            for (i, &WinId(win)) in subslice.iter().enumerate() {
                 self.window_z_orders[win as usize] = (i + z_order) as u32;
             }
         }
