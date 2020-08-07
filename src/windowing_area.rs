@@ -11,15 +11,11 @@ mod layout;
 mod window_frame;
 
 #[derive(WidgetCommon)]
-pub struct WindowingArea<'a, F>
-where
-    F: FnOnce(&mut WindowingContext, &mut UiCell<'_>),
-{
+pub struct WindowingArea<'a> {
     #[conrod(common_builder)]
     pub common: widget::CommonBuilder,
     pub style: Style,
     pub windowing_state: &'a mut WindowingState,
-    pub callback: F,
 }
 
 pub struct State {
@@ -49,14 +45,13 @@ pub struct WindowingState {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct WinId(u32);
 
-pub struct WindowingContext<'a, 'b> {
+pub struct WindowingContext<'a> {
     windowing_area_id: widget::Id,
     windowing_area_rect: conrod_core::Rect,
-    state: &'a mut widget::State<'b, State>,
     windowing_state: &'a mut WindowingState,
 }
 
-pub struct MakeWindowCallbackArg {
+pub struct WindowSetter {
     window_frame_id: widget::Id,
     content_widget_id: widget::Id,
 }
@@ -70,34 +65,24 @@ widget_ids! {
     }
 }
 
-impl<'a, F> Colorable for WindowingArea<'a, F>
-where
-    F: FnOnce(&mut WindowingContext, &mut UiCell<'_>),
-{
+impl<'a> Colorable for WindowingArea<'a> {
     builder_method!(color { style.color = Some(Color) });
 }
 
-impl<'a, F> WindowingArea<'a, F>
-where
-    F: FnOnce(&mut WindowingContext, &mut UiCell<'_>),
-{
-    pub fn new(windowing_state: &'a mut WindowingState, callback: F) -> Self {
+impl<'a> WindowingArea<'a> {
+    pub fn new(windowing_state: &'a mut WindowingState) -> Self {
         Self {
             common: widget::CommonBuilder::default(),
             style: Style::default(),
             windowing_state,
-            callback,
         }
     }
 }
 
-impl<'a, F> Widget for WindowingArea<'a, F>
-where
-    F: FnOnce(&mut WindowingContext, &mut UiCell<'_>),
-{
+impl<'a> Widget for WindowingArea<'a> {
     type State = State;
     type Style = Style;
-    type Event = ();
+    type Event = WindowingContext<'a>;
 
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
@@ -394,13 +379,11 @@ where
         {
             ui.set_mouse_cursor(cursor);
         }
-        let mut callback_arg = WindowingContext {
+        WindowingContext {
             windowing_area_id: id,
             windowing_area_rect: rect,
-            state: state,
             windowing_state,
-        };
-        (self.callback)(&mut callback_arg, &mut ui);
+        }
     }
 
     fn default_x_position(&self, _ui: &Ui) -> Position {
@@ -430,20 +413,26 @@ impl WindowingState {
     }
 }
 
-impl<'a, 'b> WindowingContext<'a, 'b> {
-    pub fn make_window<'c, F>(
-        &mut self,
+impl<'a> WindowingContext<'a> {
+    pub fn make_window<'c>(
+        &self,
         title: &'c str,
         win_id: WinId,
         ui: &mut UiCell,
-        callback: F,
-    ) where
-        F: FnOnce(MakeWindowCallbackArg, &mut UiCell),
-    {
+    ) -> Option<WindowSetter> {
+        let state: &State = match ui
+            .widget_graph()
+            .widget(self.windowing_area_id)
+            .and_then(|container| container.unique_widget_state::<WindowingArea>())
+            .map(|&conrod_core::graph::UniqueWidgetState { ref state, .. }| state)
+        {
+            Some(state) => state,
+            None => return None,
+        };
         let win_idx = win_id.0 as usize;
         let window_rect = self.windowing_state.window_rects[win_idx];
-        let window_frame_id = self.state.ids.window_frames[win_idx];
-        let content_widget_id = self.state.ids.window_contents[win_idx];
+        let window_frame_id = state.ids.window_frames[win_idx];
+        let content_widget_id = state.ids.window_contents[win_idx];
         let window_depth = -(self.windowing_state.window_z_orders[win_idx] as position::Depth);
         let [left, top] = self.windowing_area_rect.top_left();
         let conrod_window_rect = conrod_core::Rect::from_corners(
@@ -461,15 +450,14 @@ impl<'a, 'b> WindowingContext<'a, 'b> {
             .depth(window_depth)
             .parent(self.windowing_area_id)
             .set(window_frame_id, ui);
-        let arg = MakeWindowCallbackArg {
+        Some(WindowSetter {
             window_frame_id,
             content_widget_id,
-        };
-        callback(arg, ui);
+        })
     }
 }
 
-impl MakeWindowCallbackArg {
+impl WindowSetter {
     pub fn set<W>(self, widget: W, ui: &mut UiCell) -> (widget::Id, W::Event)
     where
         W: Widget,

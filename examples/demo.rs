@@ -1,7 +1,7 @@
 use conrod_core::{
     widget, widget_ids, Borderable, Colorable, Labelable, Positionable, Sizeable, Widget,
 };
-use conrod_floatwin::windowing_area::{WinId, WindowingArea, WindowingState};
+use conrod_floatwin::windowing_area::{WinId, WindowingArea, WindowingContext, WindowingState};
 use glium::Surface;
 
 mod support;
@@ -130,49 +130,48 @@ fn set_widgets(
             win_state.add(150.0, 120.0, 100.0, 100.0)
         });
     }
-    WindowingArea::new(win_state, |ctx, ui| {
-        ctx.make_window("Test1", win_ids.test1, ui, |win, ui| {
-            let c = widget::Canvas::new()
-                .border(0.0)
-                .color(conrod_core::color::LIGHT_YELLOW)
-                .scroll_kids();
-            let (container_id, _) = win.set(c, ui);
-            widget::Text::new("Hello World!")
-                .color(conrod_core::color::RED)
-                .font_size(32)
-                .parent(container_id)
-                .set(ids.text, ui);
-        });
-        let mut add_win = 0;
-        ctx.make_window("Test2", win_ids.test2, ui, |win, ui| {
-            let c = widget::Canvas::new()
-                .border(0.0)
-                .color(conrod_core::color::LIGHT_BLUE)
-                .scroll_kids();
-            let (container_id, _) = win.set(c, ui);
-            let clicks = widget::Button::new()
-                .label("Click me")
-                .w_h(100.0, 50.0)
-                .middle_of(container_id)
-                .parent(container_id)
-                .set(ids.button, ui);
-            for _ in clicks {
-                println!("Clicked me!");
-                add_win += 1;
-            }
-        });
-        for (i, &win_id) in win_ids.test_array.iter().enumerate() {
-            let title = format!("Test multi - {}", i);
-            ctx.make_window(&title, win_id, ui, |win, ui| {
-                let c = widget::Canvas::new()
-                    .border(0.0)
-                    .color(conrod_core::color::LIGHT_CHARCOAL)
-                    .scroll_kids();
-                let (container_id, _) = win.set(c, ui);
-            });
+    let win_ctx: WindowingContext = WindowingArea::new(win_state)
+        .color(conrod_core::color::LIGHT_GREY)
+        .set(ids.windowing_area, ui);
+    if let Some(win) = win_ctx.make_window("Test1", win_ids.test1, ui) {
+        let c = widget::Canvas::new()
+            .border(0.0)
+            .color(conrod_core::color::LIGHT_YELLOW)
+            .scroll_kids();
+        let (container_id, _) = win.set(c, ui);
+        widget::Text::new("Hello World!")
+            .color(conrod_core::color::RED)
+            .font_size(32)
+            .parent(container_id)
+            .set(ids.text, ui);
+    }
+    let mut add_win = 0;
+    if let Some(win) = win_ctx.make_window("Test2", win_ids.test2, ui) {
+        let c = widget::Canvas::new()
+            .border(0.0)
+            .color(conrod_core::color::LIGHT_BLUE)
+            .scroll_kids();
+        let (container_id, _) = win.set(c, ui);
+        let clicks = widget::Button::new()
+            .label("Click me")
+            .w_h(100.0, 50.0)
+            .middle_of(container_id)
+            .parent(container_id)
+            .set(ids.button, ui);
+        for _ in clicks {
+            println!("Clicked me!");
+            add_win += 1;
         }
-        *array_win_count += add_win;
-    })
-    .color(conrod_core::color::LIGHT_GREY)
-    .set(ids.windowing_area, ui);
+    }
+    for (i, &win_id) in win_ids.test_array.iter().enumerate() {
+        let title = format!("Test multi - {}", i);
+        if let Some(win) = win_ctx.make_window(&title, win_id, ui) {
+            let c = widget::Canvas::new()
+                .border(0.0)
+                .color(conrod_core::color::LIGHT_CHARCOAL)
+                .scroll_kids();
+            let (container_id, _) = win.set(c, ui);
+        }
+    }
+    *array_win_count += add_win;
 }
