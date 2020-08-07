@@ -133,8 +133,12 @@ impl<'a> Widget for WindowingArea<'a> {
                             if is_drag_move_window {
                                 if *press_id == id {
                                     // Find the window under the cursor.
-                                    windowing_state.window_z_orders.iter().rev().copied().find(
-                                        |&win| {
+                                    windowing_state
+                                        .bottom_to_top_list
+                                        .iter()
+                                        .rev()
+                                        .copied()
+                                        .find(|&win| {
                                             let win_rect =
                                                 &windowing_state.window_rects[win as usize];
                                             let x = (pos[0] - rect.left()) as f32 - win_rect.x;
@@ -142,8 +146,7 @@ impl<'a> Widget for WindowingArea<'a> {
                                             let w = win_rect.w;
                                             let h = win_rect.h;
                                             layout::window_hit_test([w, h], [x, y]).is_some()
-                                        },
-                                    )
+                                        })
                                 } else {
                                     None
                                 }
@@ -185,18 +188,19 @@ impl<'a> Widget for WindowingArea<'a> {
                             let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
                                 .unwrap_or_else(|| {
                                     let win_rect = windowing_state.window_rects[topmost_win_idx];
-                                    if is_drag_move_window {
-                                        eprintln!("window drag start");
-                                        (Some(layout::HitTest::TitleBarOrDragArea), win_rect)
-                                    } else {
-                                        let x = (drag.origin[0] - rect.left()) as f32 - win_rect.x;
-                                        let y = (rect.top() - drag.origin[1]) as f32 - win_rect.y;
-                                        let w = win_rect.w;
-                                        let h = win_rect.h;
-                                        let ht = layout::window_hit_test([w, h], [x, y]);
-                                        eprintln!("drag start on {:?}", ht);
-                                        (ht, win_rect)
-                                    }
+                                    let x = (drag.origin[0] - rect.left()) as f32 - win_rect.x;
+                                    let y = (rect.top() - drag.origin[1]) as f32 - win_rect.y;
+                                    let w = win_rect.w;
+                                    let h = win_rect.h;
+                                    let ht = layout::window_hit_test([w, h], [x, y]).map(|ht| {
+                                        if is_drag_move_window {
+                                            layout::HitTest::TitleBarOrDragArea
+                                        } else {
+                                            ht
+                                        }
+                                    });
+                                    eprintln!("drag start on {:?}", ht);
+                                    (ht, win_rect)
                                 });
                             // TODO: Make these configurable:
                             let min_w = 2.0 * 2.0 + 50.0;
@@ -334,31 +338,22 @@ impl<'a> Widget for WindowingArea<'a> {
                             .iter()
                             .rev()
                             .find_map(|&win| {
-                                if is_drag_move_window {
-                                    // Find the window under the cursor.
+                                if mouse_widget == id
+                                    || mouse_widget == state.ids.window_frames[win as usize]
+                                {
                                     let pos = current_input.mouse.xy;
-                                    windowing_state
-                                        .window_z_orders
-                                        .iter()
-                                        .rev()
-                                        .find_map(|&win| {
-                                            let win_rect =
-                                                &windowing_state.window_rects[win as usize];
-                                            let x = (pos[0] - rect.left()) as f32 - win_rect.x;
-                                            let y = (rect.top() - pos[1]) as f32 - win_rect.y;
-                                            let w = win_rect.w;
-                                            let h = win_rect.h;
-                                            layout::window_hit_test([w, h], [x, y])
-                                        })
-                                        .map(|_| layout::HitTest::TitleBarOrDragArea)
-                                } else if mouse_widget == state.ids.window_frames[win as usize] {
-                                    let mouse = &current_input.mouse;
                                     let win_rect = &windowing_state.window_rects[win as usize];
-                                    let x = (mouse.xy[0] - rect.left()) as f32 - win_rect.x;
-                                    let y = (rect.top() - mouse.xy[1]) as f32 - win_rect.y;
+                                    let x = (pos[0] - rect.left()) as f32 - win_rect.x;
+                                    let y = (rect.top() - pos[1]) as f32 - win_rect.y;
                                     let w = win_rect.w;
                                     let h = win_rect.h;
-                                    layout::window_hit_test([w, h], [x, y])
+                                    layout::window_hit_test([w, h], [x, y]).map(|ht| {
+                                        if is_drag_move_window {
+                                            layout::HitTest::TitleBarOrDragArea
+                                        } else {
+                                            ht
+                                        }
+                                    })
                                 } else {
                                     None
                                 }
