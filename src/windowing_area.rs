@@ -400,7 +400,8 @@ impl<'a> WindowingContext<'a> {
         );
         WindowFrame::new()
             .title(title)
-            .color(conrod_core::color::LIGHT_GREY)
+            .frame_color(conrod_core::color::LIGHT_CHARCOAL)
+            .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
             .wh(conrod_window_rect.dim())
             .depth(window_depth)
