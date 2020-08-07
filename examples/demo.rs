@@ -1,7 +1,10 @@
 use conrod_core::{
     widget, widget_ids, Borderable, Colorable, Labelable, Positionable, Sizeable, Widget,
 };
-use conrod_floatwin::windowing_area::{WinId, WindowingArea, WindowingContext, WindowingState};
+use conrod_floatwin::windowing_area::{
+    layout::{WinId, WindowingState},
+    WindowingArea, WindowingContext,
+};
 use glium::Surface;
 
 mod support;

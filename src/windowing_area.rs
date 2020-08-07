@@ -1,6 +1,7 @@
+use crate::empty_widget::EmptyWidget;
+use layout::{WinId, WindowingState};
 use window_frame::WindowFrame;
 
-use crate::empty_widget::EmptyWidget;
 use conrod_core::{
     cursor,
     position::{self, Place},
@@ -8,7 +9,8 @@ use conrod_core::{
     WidgetCommon, WidgetStyle,
 };
 
-mod layout;
+pub mod layout;
+
 mod window_frame;
 
 #[derive(WidgetCommon)]
@@ -26,15 +28,6 @@ pub struct State {
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, WidgetStyle)]
 pub struct Style {}
-
-pub struct WindowingState {
-    window_rects: Vec<layout::Rect>,
-    window_z_orders: Vec<u32>,
-    bottom_to_top_list: Vec<u32>,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct WinId(u32);
 
 pub struct WindowingContext<'a> {
     windowing_area_id: widget::Id,
@@ -110,8 +103,8 @@ impl<'a> Widget for WindowingArea<'a> {
                 .set(state.ids.capture_overlay, &mut ui);
         }
 
-        if state.ids.window_frames.len() != windowing_state.window_rects.len() {
-            let target_len = windowing_state.window_rects.len();
+        if state.ids.window_frames.len() != windowing_state.win_count() {
+            let target_len = windowing_state.win_count();
             state.update(|state| {
                 state
                     .ids
@@ -404,41 +397,6 @@ impl<'a> Widget for WindowingArea<'a> {
 
     fn default_y_position(&self, _ui: &Ui) -> Position {
         Position::Relative(position::Relative::Place(Place::Middle), None)
-    }
-}
-
-impl WindowingState {
-    pub fn new() -> Self {
-        Self {
-            window_rects: Vec::new(),
-            window_z_orders: Vec::new(),
-            bottom_to_top_list: Vec::new(),
-        }
-    }
-
-    pub fn add(&mut self, x: f32, y: f32, w: f32, h: f32) -> WinId {
-        let id = self.window_rects.len() as u32;
-        self.window_rects.push(layout::Rect { x, y, w, h });
-        self.window_z_orders.push(id);
-        self.bottom_to_top_list.push(id);
-        WinId(id)
-    }
-
-    pub fn bring_to_top(&mut self, win_id: WinId) {
-        let WinId(win_id) = win_id;
-        if *self
-            .bottom_to_top_list
-            .last()
-            .expect("There must already be at least one window.")
-            != win_id
-        {
-            let z_order = self.window_z_orders[win_id as usize] as usize;
-            let subslice = &mut self.bottom_to_top_list[z_order..];
-            subslice.rotate_left(1);
-            for (i, &win) in subslice.iter().enumerate() {
-                self.window_z_orders[win as usize] = (i + z_order) as u32;
-            }
-        }
     }
 }
 

@@ -38,6 +38,54 @@ enum WindowPartY {
     BottomBorder,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WinId(pub(super) u32);
+
+pub struct WindowingState {
+    pub(super) window_rects: Vec<Rect>,
+    pub(super) window_z_orders: Vec<u32>,
+    pub(super) bottom_to_top_list: Vec<u32>,
+}
+
+impl WindowingState {
+    pub fn new() -> Self {
+        Self {
+            window_rects: Vec::new(),
+            window_z_orders: Vec::new(),
+            bottom_to_top_list: Vec::new(),
+        }
+    }
+
+    pub fn add(&mut self, x: f32, y: f32, w: f32, h: f32) -> WinId {
+        let id = self.window_rects.len() as u32;
+        self.window_rects.push(Rect { x, y, w, h });
+        self.window_z_orders.push(id);
+        self.bottom_to_top_list.push(id);
+        WinId(id)
+    }
+
+    pub fn win_count(&self) -> usize {
+        self.window_rects.len()
+    }
+
+    pub fn bring_to_top(&mut self, win_id: WinId) {
+        let WinId(win_id) = win_id;
+        if *self
+            .bottom_to_top_list
+            .last()
+            .expect("There must already be at least one window.")
+            != win_id
+        {
+            let z_order = self.window_z_orders[win_id as usize] as usize;
+            let subslice = &mut self.bottom_to_top_list[z_order..];
+            subslice.rotate_left(1);
+            for (i, &win) in subslice.iter().enumerate() {
+                self.window_z_orders[win as usize] = (i + z_order) as u32;
+            }
+        }
+    }
+}
+
 pub fn window_hit_test(window_size: [f32; 2], rel_pos: [f32; 2]) -> Option<HitTest> {
     let [w, h] = window_size;
     let [x, y] = rel_pos;
