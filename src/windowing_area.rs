@@ -353,8 +353,11 @@ impl<'a> Widget for WindowingArea<'a> {
                             .win_hit_test_filtered(pos, |win_id| {
                                 // We can skip those that are not capturing the
                                 // cursor.
-                                mouse_widget == id
-                                    || mouse_widget == state.ids.window_frames[win_id.0 as usize]
+                                if is_drag_move_window {
+                                    mouse_widget == id
+                                } else {
+                                    mouse_widget == state.ids.window_frames[win_id.0 as usize]
+                                }
                             })
                             .map(|(_, ht)| {
                                 if is_drag_move_window {
