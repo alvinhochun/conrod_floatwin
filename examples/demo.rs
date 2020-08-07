@@ -24,6 +24,8 @@ fn main() {
     let display = glium::Display::new(window, context, &events_loop).unwrap();
     let display = support::GliumDisplayWinitWrapper(display);
 
+    let mut current_hidpi_factor = display.0.gl_window().get_hidpi_factor();
+
     // construct our `Ui`.
     let mut ui = conrod_core::UiBuilder::new([WIDTH as f64, HEIGHT as f64]).build();
 
@@ -74,6 +76,9 @@ fn main() {
                             },
                         ..
                     } => break 'main,
+                    glium::glutin::WindowEvent::HiDpiFactorChanged(hidpi_factor) => {
+                        current_hidpi_factor = hidpi_factor;
+                    }
                     _ => (),
                 },
                 _ => (),
@@ -87,6 +92,7 @@ fn main() {
             &mut win_state,
             &mut win_ids,
             &mut array_win_count,
+            current_hidpi_factor,
         );
 
         // Get the underlying winit window and update the mouse cursor as set by conrod.
@@ -128,6 +134,7 @@ fn set_widgets(
     win_state: &mut WindowingState,
     win_ids: &mut WinIds,
     array_win_count: &mut usize,
+    hidpi_factor: f64,
 ) {
     if win_ids.test_array.len() < *array_win_count {
         win_ids.test_array.resize_with(*array_win_count, || {
@@ -138,7 +145,8 @@ fn set_widgets(
         .color(conrod_core::color::LIGHT_GREY)
         .middle()
         .set(ids.backdrop, ui);
-    let win_ctx: WindowingContext = WindowingArea::new(win_state).set(ids.windowing_area, ui);
+    let win_ctx: WindowingContext =
+        WindowingArea::new(win_state, hidpi_factor).set(ids.windowing_area, ui);
     if let Some(win) = win_ctx.make_window("Test1", win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)

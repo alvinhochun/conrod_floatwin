@@ -19,6 +19,7 @@ pub struct WindowingArea<'a> {
     pub common: widget::CommonBuilder,
     pub style: Style,
     pub windowing_state: &'a mut WindowingState,
+    pub hidpi_factor: f64,
 }
 
 pub struct State {
@@ -50,11 +51,12 @@ widget_ids! {
 }
 
 impl<'a> WindowingArea<'a> {
-    pub fn new(windowing_state: &'a mut WindowingState) -> Self {
+    pub fn new(windowing_state: &'a mut WindowingState, hidpi_factor: f64) -> Self {
         Self {
             common: widget::CommonBuilder::default(),
             style: Style::default(),
             windowing_state,
+            hidpi_factor,
         }
     }
 }
@@ -87,8 +89,33 @@ impl<'a> Widget for WindowingArea<'a> {
         let Self {
             style,
             windowing_state,
+            hidpi_factor,
             ..
         } = self;
+
+        // Snap the rect inward to the physical pixel grid if needed.
+        let rect = if rect.dim() == ui.window_dim() {
+            // The window dimensions are already aligned to the pixel grid.
+            rect
+        } else {
+            // First, we need the coords relative to the bottom-left corner of
+            // the window.
+            let half_w = ui.win_w * 0.5;
+            let half_h = ui.win_h * 0.5;
+            let l = half_w + rect.left();
+            let r = half_w + rect.right();
+            let b = half_h + rect.bottom();
+            let t = half_h + rect.top();
+
+            // Then, we round the values inward.
+            let sl = (l * hidpi_factor).ceil() / hidpi_factor;
+            let sr = (r * hidpi_factor).floor() / hidpi_factor;
+            let sb = (b * hidpi_factor).ceil() / hidpi_factor;
+            let st = (t * hidpi_factor).floor() / hidpi_factor;
+
+            // Finally, we change the rect back to be relative to the centre.
+            position::Rect::from_corners([sl - half_w, sb - half_h], [sr - half_w, st - half_h])
+        };
 
         let is_drag_move_window =
             ui.global_input().current.modifiers == conrod_core::input::ModifierKey::ALT;
@@ -117,7 +144,7 @@ impl<'a> Widget for WindowingArea<'a> {
             });
         }
 
-        windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32]);
+        windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32], hidpi_factor as f32);
 
         let current_input = &ui.global_input().current;
         {

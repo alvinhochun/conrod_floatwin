@@ -44,6 +44,7 @@ pub struct WinId(pub(super) u32);
 
 pub struct WindowingState {
     area_size: [f32; 2],
+    hidpi_factor: f32,
     window_rects: Vec<Rect>,
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
@@ -53,14 +54,16 @@ impl WindowingState {
     pub fn new() -> Self {
         Self {
             area_size: [16_777_216.0, 16_777_216.0],
+            hidpi_factor: 1.0,
             window_rects: Vec::new(),
             window_z_orders: Vec::new(),
             bottom_to_top_list: Vec::new(),
         }
     }
 
-    pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2]) {
+    pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2], hidpi_factor: f32) {
         self.area_size = area_size;
+        self.hidpi_factor = hidpi_factor;
     }
 
     pub(crate) fn ensure_all_win_in_area(&mut self) {
@@ -126,9 +129,17 @@ impl WindowingState {
         self.bottom_to_top_list.last().copied()
     }
 
+    /// Retrieves the `Rect` of a window. The `Rect` is adjusted to align to
+    /// the physical pixel grid.
     pub fn win_rect(&self, win_id: WinId) -> Rect {
         let WinId(win_idx) = win_id;
-        self.window_rects[win_idx as usize]
+        let rect = self.window_rects[win_idx as usize];
+        Rect {
+            x: (rect.x * self.hidpi_factor).round() / self.hidpi_factor,
+            y: (rect.y * self.hidpi_factor).round() / self.hidpi_factor,
+            w: (rect.w * self.hidpi_factor).round() / self.hidpi_factor,
+            h: (rect.h * self.hidpi_factor).round() / self.hidpi_factor,
+        }
     }
 
     pub(crate) fn set_win_rect(&mut self, win_id: WinId, rect: Rect) {
