@@ -22,8 +22,8 @@ pub enum HitTest {
     // CloseButton,
 }
 
-const WINDOW_BORDER: f32 = 4.0;
-const TITLE_BAR_HEIGHT: f32 = 24.0;
+pub(crate) const WINDOW_BORDER: f32 = 4.0;
+pub(crate) const TITLE_BAR_HEIGHT: f32 = 20.0;
 
 enum WindowPartX {
     LeftBorder,

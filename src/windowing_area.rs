@@ -186,8 +186,9 @@ impl<'a> Widget for WindowingArea<'a> {
                                     (ht, win_rect)
                                 });
                             // TODO: Make these configurable:
-                            let min_w = 2.0 * 2.0 + 50.0;
-                            let min_h = 2.0 * 2.0 + 24.0 + 16.0;
+                            let min_w = layout::WINDOW_BORDER * 2.0 + 50.0;
+                            let min_h =
+                                layout::WINDOW_BORDER * 2.0 + layout::TITLE_BAR_HEIGHT + 16.0;
                             let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
                             let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
                             let new_rect = match drag_start_hit_test {

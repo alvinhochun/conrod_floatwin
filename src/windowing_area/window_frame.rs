@@ -149,7 +149,10 @@ impl<'a> Widget for WindowFrame<'a> {
 
     fn kid_area(&self, args: KidAreaArgs<Self>) -> widget::KidArea {
         widget::KidArea {
-            rect: args.rect.pad(4.0).pad_top(24.0),
+            rect: args
+                .rect
+                .pad(layout::WINDOW_BORDER as Scalar)
+                .pad_top((layout::TITLE_BAR_HEIGHT + layout::WINDOW_BORDER) as Scalar),
             pad: conrod_core::position::Padding::none(),
         }
     }
@@ -213,7 +216,7 @@ impl<'a> Widget for WindowFrame<'a> {
                 .label_font_size(font_size)
                 .label_color(label_color)
                 .line_spacing(line_spacing)
-                .h(24.0)
+                .h(layout::TITLE_BAR_HEIGHT as Scalar)
                 .graphics_for(id)
                 .place_on_kid_area(false)
                 .set(state.ids.title_bar, &mut ui);
