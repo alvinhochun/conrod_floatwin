@@ -3,7 +3,12 @@ name = "conrod_floatwin"
 version = "0.0.1"
 authors = ["Alvin Wong <alvinhochun@gmail.com>"]
 edition = "2018"
-publish = false
+
+description = "A virtual windowing library for Conrod UI."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/alvinhochun/conrod_floatwin"
+readme = "README.md"
+categories = ["gui", "graphics"]
 
 [dependencies]
 conrod_core = ">=0.69"
