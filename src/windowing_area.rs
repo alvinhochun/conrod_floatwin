@@ -143,7 +143,7 @@ impl<'a> Widget for WindowingArea<'a> {
             });
         }
 
-        windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32], hidpi_factor as f32);
+        windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32], hidpi_factor);
 
         let current_input = &ui.global_input().current;
         {
@@ -420,18 +420,18 @@ impl<'a> WindowingContext<'a> {
             None => return None,
         };
         let win_idx = win_id.0 as usize;
-        let window_rect = self.windowing_state.win_rect(win_id);
         let window_frame_id = state.ids.window_frames[win_idx];
         let content_widget_id = state.ids.window_contents[win_idx];
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
-        let [left, top] = self.windowing_area_rect.top_left();
-        let conrod_window_rect = conrod_core::Rect::from_corners(
-            [left + window_rect.x as f64, top - window_rect.y as f64],
-            [
-                left + window_rect.x as f64 + window_rect.w as f64,
-                top - window_rect.y as f64 - window_rect.h as f64,
-            ],
-        );
+        let conrod_window_rect = {
+            let [x, y, w, h] = self.windowing_state.win_rect_f64(win_id);
+            let [left, top] = self.windowing_area_rect.top_left();
+            let x1 = left + x;
+            let y1 = top - y;
+            let x2 = left + x + w;
+            let y2 = top - y - h;
+            conrod_core::Rect::from_corners([x1, y1], [x2, y2])
+        };
         WindowFrame::new()
             .title(title)
             .frame_color(conrod_core::color::LIGHT_CHARCOAL)

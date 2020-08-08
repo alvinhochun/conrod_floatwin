@@ -44,7 +44,7 @@ pub struct WinId(pub(super) u32);
 
 pub struct WindowingState {
     area_size: [f32; 2],
-    hidpi_factor: f32,
+    hidpi_factor: f64,
     window_rects: Vec<Rect>,
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
@@ -61,7 +61,7 @@ impl WindowingState {
         }
     }
 
-    pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2], hidpi_factor: f32) {
+    pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2], hidpi_factor: f64) {
         self.area_size = area_size;
         self.hidpi_factor = hidpi_factor;
     }
@@ -130,16 +130,35 @@ impl WindowingState {
     }
 
     /// Retrieves the `Rect` of a window. The `Rect` is adjusted to align to
-    /// the physical pixel grid.
+    /// the physical pixel grid. Note that since the returned `Rect` contains
+    /// f32 dimensions, it may not suitable for use with GUI toolkits that uses
+    /// f64 internally due to the limited precision.
     pub fn win_rect(&self, win_id: WinId) -> Rect {
         let WinId(win_idx) = win_id;
         let rect = self.window_rects[win_idx as usize];
+        let hidpi_factor = self.hidpi_factor as f32;
         Rect {
-            x: (rect.x * self.hidpi_factor).round() / self.hidpi_factor,
-            y: (rect.y * self.hidpi_factor).round() / self.hidpi_factor,
-            w: (rect.w * self.hidpi_factor).round() / self.hidpi_factor,
-            h: (rect.h * self.hidpi_factor).round() / self.hidpi_factor,
+            x: (rect.x * hidpi_factor).round() / hidpi_factor,
+            y: (rect.y * hidpi_factor).round() / hidpi_factor,
+            w: (rect.w * hidpi_factor).round() / hidpi_factor,
+            h: (rect.h * hidpi_factor).round() / hidpi_factor,
         }
+    }
+
+    /// Retrieves the x, y, width and height of a window. The dimensions are
+    /// adjusted to align to the physical pixel grid. The calculations use f64
+    /// so that the results are precise enough for GUI toolkits that uses f64
+    /// internally.
+    pub fn win_rect_f64(&self, win_id: WinId) -> [f64; 4] {
+        let WinId(win_idx) = win_id;
+        let rect = self.window_rects[win_idx as usize];
+        let hidpi_factor = self.hidpi_factor;
+        [
+            (rect.x as f64 * hidpi_factor).round() / hidpi_factor,
+            (rect.y as f64 * hidpi_factor).round() / hidpi_factor,
+            (rect.w as f64 * hidpi_factor).round() / hidpi_factor,
+            (rect.h as f64 * hidpi_factor).round() / hidpi_factor,
+        ]
     }
 
     pub(crate) fn set_win_rect(&mut self, win_id: WinId, rect: Rect) {
