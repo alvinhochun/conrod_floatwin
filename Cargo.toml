@@ -19,5 +19,10 @@ conrod_core = ">=0.69"
 conrod_core = "0.70"
 conrod_glium = "0.70"
 conrod_winit = "0.70"
-glium = "0.24"
-winit = "0.19"
+glium = "0.27"
+winit = "0.22"
+
+[patch.crates-io]
+conrod_core = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
+conrod_glium = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
+conrod_winit = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
