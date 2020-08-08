@@ -1,9 +1,11 @@
 use super::layout;
+use layout::FrameMetrics;
+
 use conrod_core::{
     builder_methods,
     position::{self},
     text, widget, widget_ids, Borderable, Color, Colorable, FontSize, Labelable, Positionable,
-    Scalar, Sizeable, Widget, WidgetCommon, WidgetStyle,
+    Sizeable, Widget, WidgetCommon, WidgetStyle,
 };
 use widget::KidAreaArgs;
 
@@ -13,6 +15,7 @@ pub struct WindowFrame<'a> {
     pub common: widget::CommonBuilder,
     pub style: Style,
     pub title: &'a str,
+    pub(crate) frame_metrics: FrameMetrics,
 }
 
 pub struct State {
@@ -72,11 +75,12 @@ widget_ids! {
 }
 
 impl<'a> WindowFrame<'a> {
-    pub fn new() -> Self {
+    pub(crate) fn new(frame_metrics: FrameMetrics) -> Self {
         Self {
             common: widget::CommonBuilder::default(),
             style: Style::default(),
             title: "",
+            frame_metrics,
         }
     }
 
@@ -111,11 +115,12 @@ impl<'a> Widget for WindowFrame<'a> {
     }
 
     fn kid_area(&self, args: KidAreaArgs<Self>) -> widget::KidArea {
+        let rect = args
+            .rect
+            .pad(self.frame_metrics.border_thickness)
+            .pad_top(self.frame_metrics.title_bar_height + self.frame_metrics.gap_below_title_bar);
         widget::KidArea {
-            rect: args
-                .rect
-                .pad(layout::WINDOW_BORDER as Scalar)
-                .pad_top((layout::TITLE_BAR_HEIGHT + layout::PADDING_BELOW_TITLE_BAR) as Scalar),
+            rect,
             pad: conrod_core::position::Padding::none(),
         }
     }
@@ -129,7 +134,12 @@ impl<'a> Widget for WindowFrame<'a> {
             ..
         } = args;
         let state: &mut widget::State<State> = state;
-        let Self { style, title, .. } = self;
+        let Self {
+            style,
+            title,
+            frame_metrics,
+            ..
+        } = self;
         let style: Style = style;
 
         // Rectangle for the window frame (the content is paint over it).
@@ -157,11 +167,11 @@ impl<'a> Widget for WindowFrame<'a> {
                 .y_position_relative_to(
                     id,
                     position::Relative::Place(position::Place::End(Some(
-                        layout::WINDOW_BORDER as Scalar,
+                        frame_metrics.border_thickness,
                     ))),
                 )
-                .w(rect.w() - layout::WINDOW_BORDER as Scalar * 2.0)
-                .h(layout::TITLE_BAR_HEIGHT as Scalar)
+                .w(rect.w() - frame_metrics.border_thickness * 2.0)
+                .h(frame_metrics.title_bar_height)
                 .graphics_for(id)
                 .place_on_kid_area(false)
                 .set(state.ids.title_bar, &mut ui);

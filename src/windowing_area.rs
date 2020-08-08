@@ -1,5 +1,5 @@
 use crate::{empty_widget::EmptyWidget, util};
-use layout::{WinId, WindowingState};
+use layout::{FrameMetrics, WinId, WindowingState};
 use window_frame::WindowFrame;
 
 use conrod_core::{
@@ -34,6 +34,7 @@ pub struct WindowingContext<'a> {
     windowing_area_id: widget::Id,
     windowing_area_rect: conrod_core::Rect,
     windowing_state: &'a mut WindowingState,
+    frame_metrics: FrameMetrics,
 }
 
 pub struct WindowSetter {
@@ -144,6 +145,7 @@ impl<'a> Widget for WindowingArea<'a> {
         }
 
         windowing_state.set_dimensions([rect.w() as f32, rect.h() as f32], hidpi_factor);
+        let frame_metrics = windowing_state.frame_metrics();
 
         let current_input = &ui.global_input().current;
         {
@@ -214,9 +216,10 @@ impl<'a> Widget for WindowingArea<'a> {
                                     (ht, win_rect)
                                 });
                             // TODO: Make these configurable:
-                            let min_w = layout::WINDOW_BORDER * 2.0 + 50.0;
-                            let min_h =
-                                layout::WINDOW_BORDER * 2.0 + layout::TITLE_BAR_HEIGHT + 16.0;
+                            let min_w = frame_metrics.border_thickness as f32 * 2.0 + 50.0;
+                            let min_h = frame_metrics.border_thickness as f32 * 2.0
+                                + frame_metrics.title_bar_height as f32
+                                + 16.0;
                             let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
                             let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
                             let new_rect = match drag_start_hit_test {
@@ -391,6 +394,7 @@ impl<'a> Widget for WindowingArea<'a> {
             windowing_area_id: id,
             windowing_area_rect: rect,
             windowing_state,
+            frame_metrics,
         }
     }
 
@@ -432,7 +436,7 @@ impl<'a> WindowingContext<'a> {
             let y2 = top - y - h;
             conrod_core::Rect::from_corners([x1, y1], [x2, y2])
         };
-        WindowFrame::new()
+        WindowFrame::new(self.frame_metrics)
             .title(title)
             .frame_color(conrod_core::color::LIGHT_CHARCOAL)
             .title_bar_color(conrod_core::color::LIGHT_GRAY)

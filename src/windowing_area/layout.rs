@@ -22,10 +22,6 @@ pub enum HitTest {
     // CloseButton,
 }
 
-pub(crate) const WINDOW_BORDER: f32 = 4.0;
-pub(crate) const TITLE_BAR_HEIGHT: f32 = 20.0;
-pub(crate) const PADDING_BELOW_TITLE_BAR: f32 = 2.0;
-
 enum WindowPartX {
     LeftBorder,
     Content,
@@ -48,6 +44,41 @@ pub struct WindowingState {
     window_rects: Vec<Rect>,
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
+    frame_metrics: FrameMetrics,
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub(crate) struct FrameMetrics {
+    pub(crate) border_thickness: f64,
+    pub(crate) title_bar_height: f64,
+    pub(crate) gap_below_title_bar: f64,
+}
+
+impl FrameMetrics {
+    pub(crate) fn with_hidpi_factor(hidpi_factor: f64) -> Self {
+        let border_thickness;
+        let title_bar_height;
+        let gap_below_title_bar;
+        if hidpi_factor < 1.51 {
+            border_thickness = 4.0 / hidpi_factor;
+            gap_below_title_bar = 1.0 / hidpi_factor;
+        } else {
+            border_thickness = 4.0 * hidpi_factor.round() / hidpi_factor;
+            gap_below_title_bar = 1.0 * hidpi_factor.round() / hidpi_factor;
+        }
+        title_bar_height = (20.0 * hidpi_factor).round() / hidpi_factor;
+        eprintln!(
+            "{:?}, {:?}, {:?}",
+            border_thickness * hidpi_factor,
+            title_bar_height * hidpi_factor,
+            gap_below_title_bar * hidpi_factor
+        );
+        dbg!(Self {
+            border_thickness,
+            title_bar_height,
+            gap_below_title_bar,
+        })
+    }
 }
 
 impl WindowingState {
@@ -58,10 +89,14 @@ impl WindowingState {
             window_rects: Vec::new(),
             window_z_orders: Vec::new(),
             bottom_to_top_list: Vec::new(),
+            frame_metrics: FrameMetrics::with_hidpi_factor(1.0),
         }
     }
 
     pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2], hidpi_factor: f64) {
+        if self.hidpi_factor != hidpi_factor {
+            self.frame_metrics = FrameMetrics::with_hidpi_factor(hidpi_factor);
+        }
         self.area_size = area_size;
         self.hidpi_factor = hidpi_factor;
     }
@@ -88,6 +123,10 @@ impl WindowingState {
         let win_id = WinId(id);
         self.bottom_to_top_list.push(win_id);
         win_id
+    }
+
+    pub(crate) fn frame_metrics(&self) -> FrameMetrics {
+        self.frame_metrics
     }
 
     pub fn win_count(&self) -> usize {
@@ -122,7 +161,7 @@ impl WindowingState {
         let y = pos[1] - win_rect.y;
         let w = win_rect.w;
         let h = win_rect.h;
-        window_hit_test([w, h], [x, y])
+        window_hit_test([w, h], [x, y], self.frame_metrics)
     }
 
     pub fn topmost_win(&self) -> Option<WinId> {
@@ -189,25 +228,32 @@ impl WindowingState {
     }
 }
 
-pub fn window_hit_test(window_size: [f32; 2], rel_pos: [f32; 2]) -> Option<HitTest> {
+fn window_hit_test(
+    window_size: [f32; 2],
+    rel_pos: [f32; 2],
+    frame_metrics: FrameMetrics,
+) -> Option<HitTest> {
     let [w, h] = window_size;
     let [x, y] = rel_pos;
     if x < 0.0 || y < 0.0 || x > w || y > h {
         return None;
     }
 
-    let window_part_x = if x <= WINDOW_BORDER {
+    let border_thickness = frame_metrics.border_thickness as f32;
+    let title_bar_height = frame_metrics.title_bar_height as f32;
+
+    let window_part_x = if x <= border_thickness {
         WindowPartX::LeftBorder
-    } else if x >= w - WINDOW_BORDER {
+    } else if x >= w - border_thickness {
         WindowPartX::RightBorder
     } else {
         WindowPartX::Content
     };
-    let window_part_y = if y <= WINDOW_BORDER {
+    let window_part_y = if y <= border_thickness {
         WindowPartY::TopBorder
-    } else if y >= h - WINDOW_BORDER {
+    } else if y >= h - border_thickness {
         WindowPartY::BottomBorder
-    } else if y <= WINDOW_BORDER + TITLE_BAR_HEIGHT {
+    } else if y <= border_thickness + title_bar_height {
         WindowPartY::TitleBar
     } else {
         WindowPartY::Content
