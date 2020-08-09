@@ -169,7 +169,7 @@ impl WindowingState {
         let y = pos[1] - win_rect.y;
         let w = win_rect.w;
         let h = win_rect.h;
-        window_hit_test([w, h], [x, y], self.frame_metrics)
+        window_hit_test([w, h], [x, y], self.hidpi_factor as f32, self.frame_metrics)
     }
 
     pub fn topmost_win(&self) -> Option<WinId> {
@@ -239,16 +239,21 @@ impl WindowingState {
 fn window_hit_test(
     window_size: [f32; 2],
     rel_pos: [f32; 2],
+    hidpi_factor: f32,
     frame_metrics: FrameMetrics,
 ) -> Option<HitTest> {
-    let [w, h] = window_size;
-    let [x, y] = rel_pos;
-    if x < 0.0 || y < 0.0 || x > w || y > h {
+    let [log_w, log_h] = window_size;
+    let [log_x, log_y] = rel_pos;
+    if log_x < -0.01 || log_y < -0.01 || log_x > log_w + 0.01 || log_y > log_h + 0.01 {
         return None;
     }
+    let x = (log_x * hidpi_factor).round() as i32;
+    let y = (log_y * hidpi_factor).round() as i32;
+    let w = (log_w * hidpi_factor).round() as i32;
+    let h = (log_h * hidpi_factor).round() as i32;
 
-    let border_thickness = frame_metrics.border_thickness as f32;
-    let title_bar_height = frame_metrics.title_bar_height as f32;
+    let border_thickness = (frame_metrics.border_thickness as f32 * hidpi_factor).round() as i32;
+    let title_bar_height = (frame_metrics.title_bar_height as f32 * hidpi_factor).round() as i32;
 
     let window_part_x = if x <= border_thickness {
         WindowPartX::LeftBorder
@@ -267,7 +272,7 @@ fn window_hit_test(
         WindowPartY::Content
     };
 
-    let corner_leeway = border_thickness * 3.0;
+    let corner_leeway = border_thickness * 3;
     let (is_near_l, is_near_r) = if x <= corner_leeway {
         (true, false)
     } else if x >= w - corner_leeway {
