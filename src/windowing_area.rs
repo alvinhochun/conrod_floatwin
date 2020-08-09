@@ -24,7 +24,7 @@ pub struct WindowingArea<'a> {
 
 pub struct State {
     ids: Ids,
-    maybe_dragging_win_hit_test: Option<Option<layout::HitTest>>,
+    maybe_dragging_win: Option<bool>,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, WidgetStyle)]
@@ -70,7 +70,7 @@ impl<'a> Widget for WindowingArea<'a> {
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
             ids: Ids::new(id_gen),
-            maybe_dragging_win_hit_test: None,
+            maybe_dragging_win: None,
         }
     }
 
@@ -185,47 +185,57 @@ impl<'a> Widget for WindowingArea<'a> {
                             windowing_state.bring_to_top(win_id);
                         }
                     }
-                    conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
+                    conrod_core::event::Ui::Drag(Some(drag_id), drag)
+                        if state.maybe_dragging_win != Some(false) =>
+                    {
                         let is_self_event = || {
-                            *drag_id == id
-                                || windowing_state
-                                    .topmost_win()
-                                    .map_or(false, |WinId(top_win)| {
-                                        *drag_id == state.ids.window_frames[top_win as usize]
-                                    })
+                            *drag_id == id || {
+                                // Check whether the event widget id matches.
+                                if state.maybe_dragging_win.is_some() {
+                                    // If a window is being dragged, use it.
+                                    windowing_state
+                                        .current_dragging_win()
+                                        .map(|(win_id, _)| win_id)
+                                } else {
+                                    // Otherwise, use the topmost window.
+                                    windowing_state.topmost_win()
+                                }
+                                .map_or(false, |WinId(win)| {
+                                    *drag_id == state.ids.window_frames[win as usize]
+                                })
+                            }
                         };
                         if drag.button == conrod_core::input::MouseButton::Left && is_self_event() {
                             let topmost_win_id = windowing_state
                                 .topmost_win()
                                 .unwrap_or_else(|| unreachable!());
-                            let dragging_win_hit_test =
-                                state.maybe_dragging_win_hit_test.unwrap_or_else(|| {
-                                    let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
-                                    let ht = windowing_state
-                                        .specific_win_hit_test(topmost_win_id, pos)
-                                        .map(|ht| {
-                                            if is_drag_move_window {
-                                                layout::HitTest::TitleBarOrDragArea
-                                            } else {
-                                                ht
-                                            }
-                                        });
-                                    eprintln!("drag start on {:?}", ht);
-                                    if let Some(ht) = ht {
-                                        windowing_state.win_drag_start(topmost_win_id, ht);
-                                        Some(ht)
-                                    } else {
-                                        None
-                                    }
-                                });
-                            if dragging_win_hit_test.is_some() {
+                            let is_dragging_win = state.maybe_dragging_win.unwrap_or_else(|| {
+                                let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
+                                let ht = windowing_state
+                                    .specific_win_hit_test(topmost_win_id, pos)
+                                    .map(|ht| {
+                                        if is_drag_move_window {
+                                            layout::HitTest::TitleBarOrDragArea
+                                        } else {
+                                            ht
+                                        }
+                                    });
+                                eprintln!("drag start on {:?}", ht);
+                                if let Some(ht) = ht {
+                                    windowing_state.win_drag_start(topmost_win_id, ht);
+                                    true
+                                } else {
+                                    false
+                                }
+                            });
+                            if is_dragging_win {
                                 let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
                                 let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
                                 windowing_state.win_drag_update([drag_delta_x, drag_delta_y]);
                             }
-                            if state.maybe_dragging_win_hit_test != Some(dragging_win_hit_test) {
+                            if state.maybe_dragging_win != Some(is_dragging_win) {
                                 state.update(|state| {
-                                    state.maybe_dragging_win_hit_test = Some(dragging_win_hit_test);
+                                    state.maybe_dragging_win = Some(is_dragging_win);
                                 });
                             }
                         }
@@ -241,27 +251,33 @@ impl<'a> Widget for WindowingArea<'a> {
                             ..
                         },
                     ) => {
-                        if let Some(is_dragging_window) = state.maybe_dragging_win_hit_test {
+                        if let Some(is_dragging_window) = state.maybe_dragging_win {
                             eprintln!("drag release");
-                            if is_dragging_window.is_some() {
+                            if is_dragging_window {
                                 windowing_state.win_drag_end(false);
                             }
                             state.update(|state| {
-                                state.maybe_dragging_win_hit_test = None;
+                                state.maybe_dragging_win = None;
                             });
                         }
                     }
                     _ => {}
                 }
             }
-            if state.maybe_dragging_win_hit_test.flatten().is_none() {
+            if state.maybe_dragging_win != Some(true) {
                 windowing_state.ensure_all_win_in_area();
             }
         }
 
         if let Some(cursor) = state
-            .maybe_dragging_win_hit_test
-            .flatten()
+            .maybe_dragging_win
+            .and_then(|is_dragging| {
+                if is_dragging {
+                    windowing_state.current_dragging_win().map(|(_, ht)| ht)
+                } else {
+                    None
+                }
+            })
             .or_else(|| {
                 current_input
                     .widget_capturing_mouse

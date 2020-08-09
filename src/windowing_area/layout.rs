@@ -261,8 +261,14 @@ impl WindowingState {
         if abort {
             self.set_win_rect(win_id, starting_rect);
         } else {
-            // TODO: Round to device pixel...
+            // Round to device pixel.
+            self.set_win_rect(win_id, self.win_rect(win_id));
         }
+    }
+
+    pub fn current_dragging_win(&self) -> Option<(WinId, HitTest)> {
+        self.maybe_dragging_window
+            .map(|(win_id, ht, _)| (win_id, ht))
     }
 
     pub fn win_drag_update(&mut self, offset: [f32; 2]) -> bool {
@@ -272,7 +278,8 @@ impl WindowingState {
         };
         let [dx, dy] = offset;
 
-        // TODO: Bring to top...
+        // Ensure the window being dragged is topmost.
+        self.bring_to_top(win_id);
 
         let border_thickness = self.frame_metrics.border_thickness as f32;
         let title_bar_height = self.frame_metrics.title_bar_height as f32;
