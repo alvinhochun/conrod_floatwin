@@ -287,92 +287,54 @@ impl WindowingState {
         // TODO: Make these configurable:
         let min_w = border_thickness * 2.0 + 50.0;
         let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
-        let new_rect = match dragging_hit_test {
+
+        // Calculate horizontal dimensions:
+        let (new_x, new_w);
+        match dragging_hit_test {
+            HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
+                new_x = starting_rect.x;
+                new_w = starting_rect.w;
+            }
             HitTest::TitleBarOrDragArea => {
-                let new_x = starting_rect.x + dx;
-                let new_y = starting_rect.y + dy;
-                Rect {
-                    x: new_x,
-                    y: new_y,
-                    ..starting_rect
-                }
+                new_x = starting_rect.x + dx;
+                new_w = starting_rect.w;
             }
-            HitTest::TopBorder => {
-                let new_h = (starting_rect.h - dy).max(min_h);
-                let new_y = starting_rect.y + (starting_rect.h - new_h);
-                Rect {
-                    y: new_y,
-                    h: new_h,
-                    ..starting_rect
-                }
+            HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
+                new_w = (starting_rect.w - dx).max(min_w);
+                new_x = starting_rect.x + (starting_rect.w - new_w);
             }
-            HitTest::BottomBorder => {
-                let new_h = (starting_rect.h + dy).max(min_h);
-                Rect {
-                    h: new_h,
-                    ..starting_rect
-                }
+            HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
+                new_x = starting_rect.x;
+                new_w = (starting_rect.w + dx).max(min_w);
             }
-            HitTest::LeftBorder => {
-                let new_w = (starting_rect.w - dx).max(min_w);
-                let new_x = starting_rect.x + (starting_rect.w - new_w);
-                Rect {
-                    x: new_x,
-                    w: new_w,
-                    ..starting_rect
-                }
+        }
+
+        // Calculate vertical dimensions:
+        let (new_y, new_h);
+        match dragging_hit_test {
+            HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
+                new_y = starting_rect.y;
+                new_h = starting_rect.h;
             }
-            HitTest::RightBorder => {
-                let new_w = (starting_rect.w + dx).max(min_w);
-                Rect {
-                    w: new_w,
-                    ..starting_rect
-                }
+            HitTest::TitleBarOrDragArea => {
+                new_y = starting_rect.y + dy;
+                new_h = starting_rect.h;
             }
-            HitTest::TopLeftCorner => {
-                let new_w = (starting_rect.w - dx).max(min_w);
-                let new_h = (starting_rect.h - dy).max(min_h);
-                let new_x = starting_rect.x + (starting_rect.w - new_w);
-                let new_y = starting_rect.y + (starting_rect.h - new_h);
-                Rect {
-                    x: new_x,
-                    y: new_y,
-                    w: new_w,
-                    h: new_h,
-                }
+            HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
+                new_h = (starting_rect.h - dy).max(min_h);
+                new_y = starting_rect.y + (starting_rect.h - new_h);
             }
-            HitTest::TopRightCorner => {
-                let new_h = (starting_rect.h - dy).max(min_h);
-                let new_y = starting_rect.y + (starting_rect.h - new_h);
-                let new_w = (starting_rect.w + dx).max(min_w);
-                Rect {
-                    y: new_y,
-                    w: new_w,
-                    h: new_h,
-                    ..starting_rect
-                }
+            HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
+                new_y = starting_rect.y;
+                new_h = (starting_rect.h + dy).max(min_h);
             }
-            HitTest::BottomLeftCorner => {
-                let new_w = (starting_rect.w - dx).max(min_w);
-                let new_x = starting_rect.x + (starting_rect.w - new_w);
-                let new_h = (starting_rect.h + dy).max(min_h);
-                Rect {
-                    x: new_x,
-                    w: new_w,
-                    h: new_h,
-                    ..starting_rect
-                }
-            }
-            HitTest::BottomRightCorner => {
-                let new_w = (starting_rect.w + dx).max(min_w);
-                let new_h = (starting_rect.h + dy).max(min_h);
-                Rect {
-                    w: new_w,
-                    h: new_h,
-                    ..starting_rect
-                }
-            }
-            _ => starting_rect,
+        }
+
+        let new_rect = Rect {
+            x: new_x,
+            y: new_y,
+            w: new_w,
+            h: new_h,
         };
         self.set_win_rect(win_id, new_rect);
         true
