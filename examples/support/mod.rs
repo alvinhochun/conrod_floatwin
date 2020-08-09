@@ -12,9 +12,8 @@ pub enum Request<'a, 'b: 'a> {
         should_exit: &'a mut bool,
     },
     SetUi {
-        needs_redraw: &'a mut bool,
+        has_redrawn: &'a mut bool,
     },
-    Redraw,
 }
 
 /// In most of the examples the `glutin` crate is used for providing the window context and
@@ -60,17 +59,15 @@ where
                 next_update = Some(std::time::Instant::now() + sixteen_ms);
                 ui_update_needed = false;
 
-                let mut needs_redraw = false;
+                let mut has_redrawn = false;
                 callback(
                     Request::SetUi {
-                        needs_redraw: &mut needs_redraw,
+                        has_redrawn: &mut has_redrawn,
                     },
                     &display,
                 );
-                if needs_redraw {
-                    display.gl_window().window().request_redraw();
-                } else {
-                    // We don't need to redraw anymore until more events arrives.
+                if !has_redrawn {
+                    // We don't need to update the UI anymore until more events arrives.
                     next_update = None;
                 }
             }
@@ -80,14 +77,6 @@ where
             *control_flow = event_loop::ControlFlow::WaitUntil(next_update);
         } else {
             *control_flow = event_loop::ControlFlow::Wait;
-        }
-
-        // Request redraw if needed.
-        match &event {
-            event::Event::RedrawRequested(_) => {
-                callback(Request::Redraw, &display);
-            }
-            _ => {}
         }
     })
 }
