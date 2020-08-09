@@ -24,7 +24,7 @@ pub struct WindowingArea<'a> {
 
 pub struct State {
     ids: Ids,
-    maybe_drag_start_tuple: Option<(Option<layout::HitTest>, layout::Rect)>,
+    maybe_dragging_win_hit_test: Option<Option<layout::HitTest>>,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, WidgetStyle)]
@@ -70,7 +70,7 @@ impl<'a> Widget for WindowingArea<'a> {
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
             ids: Ids::new(id_gen),
-            maybe_drag_start_tuple: None,
+            maybe_dragging_win_hit_test: None,
         }
     }
 
@@ -149,7 +149,6 @@ impl<'a> Widget for WindowingArea<'a> {
 
         let current_input = &ui.global_input().current;
         {
-            let mut maybe_drag_start_tuple = state.maybe_drag_start_tuple;
             for event in ui.global_input().events().ui() {
                 match event {
                     conrod_core::event::Ui::Press(
@@ -199,10 +198,9 @@ impl<'a> Widget for WindowingArea<'a> {
                             let topmost_win_id = windowing_state
                                 .topmost_win()
                                 .unwrap_or_else(|| unreachable!());
-                            let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
-                                .unwrap_or_else(|| {
+                            let dragging_win_hit_test =
+                                state.maybe_dragging_win_hit_test.unwrap_or_else(|| {
                                     let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
-                                    let win_rect = windowing_state.win_rect(topmost_win_id);
                                     let ht = windowing_state
                                         .specific_win_hit_test(topmost_win_id, pos)
                                         .map(|ht| {
@@ -213,107 +211,23 @@ impl<'a> Widget for WindowingArea<'a> {
                                             }
                                         });
                                     eprintln!("drag start on {:?}", ht);
-                                    (ht, win_rect)
+                                    if let Some(ht) = ht {
+                                        windowing_state.win_drag_start(topmost_win_id, ht);
+                                        Some(ht)
+                                    } else {
+                                        None
+                                    }
                                 });
-                            // TODO: Make these configurable:
-                            let min_w = frame_metrics.border_thickness as f32 * 2.0 + 50.0;
-                            let min_h = frame_metrics.border_thickness as f32 * 2.0
-                                + frame_metrics.title_bar_height as f32
-                                + 16.0;
-                            let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
-                            let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
-                            let new_rect = match drag_start_hit_test {
-                                Some(layout::HitTest::TitleBarOrDragArea) => {
-                                    let new_x = drag_start_rect.x + drag_delta_x;
-                                    let new_y = drag_start_rect.y + drag_delta_y;
-                                    layout::Rect {
-                                        x: new_x,
-                                        y: new_y,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::TopBorder) => {
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    layout::Rect {
-                                        y: new_y,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomBorder) => {
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::LeftBorder) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    layout::Rect {
-                                        x: new_x,
-                                        w: new_w,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::RightBorder) => {
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    layout::Rect {
-                                        w: new_w,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::TopLeftCorner) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    layout::Rect {
-                                        x: new_x,
-                                        y: new_y,
-                                        w: new_w,
-                                        h: new_h,
-                                    }
-                                }
-                                Some(layout::HitTest::TopRightCorner) => {
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    layout::Rect {
-                                        y: new_y,
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomLeftCorner) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        x: new_x,
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomRightCorner) => {
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                _ => drag_start_rect,
-                            };
-                            maybe_drag_start_tuple = Some((drag_start_hit_test, drag_start_rect));
-                            state.update(|state| {
-                                state.maybe_drag_start_tuple = maybe_drag_start_tuple;
-                            });
-                            windowing_state.set_win_rect(topmost_win_id, new_rect);
+                            if dragging_win_hit_test.is_some() {
+                                let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
+                                let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
+                                windowing_state.win_drag_update([drag_delta_x, drag_delta_y]);
+                            }
+                            if state.maybe_dragging_win_hit_test != Some(dragging_win_hit_test) {
+                                state.update(|state| {
+                                    state.maybe_dragging_win_hit_test = Some(dragging_win_hit_test);
+                                });
+                            }
                         }
                     }
                     conrod_core::event::Ui::Release(
@@ -327,25 +241,27 @@ impl<'a> Widget for WindowingArea<'a> {
                             ..
                         },
                     ) => {
-                        if maybe_drag_start_tuple.is_some() {
+                        if let Some(is_dragging_window) = state.maybe_dragging_win_hit_test {
                             eprintln!("drag release");
-                            maybe_drag_start_tuple = None;
+                            if is_dragging_window.is_some() {
+                                windowing_state.win_drag_end(false);
+                            }
                             state.update(|state| {
-                                state.maybe_drag_start_tuple = maybe_drag_start_tuple;
+                                state.maybe_dragging_win_hit_test = None;
                             });
                         }
                     }
                     _ => {}
                 }
             }
-            if maybe_drag_start_tuple.is_none() {
+            if state.maybe_dragging_win_hit_test.flatten().is_none() {
                 windowing_state.ensure_all_win_in_area();
             }
         }
 
         if let Some(cursor) = state
-            .maybe_drag_start_tuple
-            .and_then(|(ht, _)| ht)
+            .maybe_dragging_win_hit_test
+            .flatten()
             .or_else(|| {
                 current_input
                     .widget_capturing_mouse

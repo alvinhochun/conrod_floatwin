@@ -45,6 +45,7 @@ pub struct WindowingState {
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
     frame_metrics: FrameMetrics,
+    maybe_dragging_window: Option<(WinId, HitTest, Rect)>,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -90,6 +91,7 @@ impl WindowingState {
             window_z_orders: Vec::new(),
             bottom_to_top_list: Vec::new(),
             frame_metrics: FrameMetrics::with_hidpi_factor(1.0),
+            maybe_dragging_window: None,
         }
     }
 
@@ -233,6 +235,140 @@ impl WindowingState {
                 self.window_z_orders[win as usize] = (i + z_order) as u32;
             }
         }
+    }
+
+    pub fn win_drag_start(&mut self, win_id: WinId, hit_test: HitTest) {
+        if let Some((dragging_win_id, _, _)) = self.maybe_dragging_window {
+            if dragging_win_id == win_id {
+                // Trying to drag the same window? Just continue dragging...
+                self.win_drag_end(false);
+            } else {
+                self.win_drag_end(true);
+            }
+        }
+        let WinId(win_idx) = win_id;
+        // Using the raw `Rect` instead of the rounded rect - we snap the Rect
+        // to device pixel only when the dragging ends.
+        let initial_rect = self.window_rects[win_idx as usize];
+        self.maybe_dragging_window = Some((win_id, hit_test, initial_rect));
+    }
+
+    pub fn win_drag_end(&mut self, abort: bool) {
+        let (win_id, _, starting_rect) = match self.maybe_dragging_window.take() {
+            Some(x) => x,
+            None => return,
+        };
+        if abort {
+            self.set_win_rect(win_id, starting_rect);
+        } else {
+            // TODO: Round to device pixel...
+        }
+    }
+
+    pub fn win_drag_update(&mut self, offset: [f32; 2]) -> bool {
+        let (win_id, dragging_hit_test, starting_rect) = match self.maybe_dragging_window {
+            Some(x) => x,
+            None => return false,
+        };
+        let [dx, dy] = offset;
+
+        // TODO: Bring to top...
+
+        let border_thickness = self.frame_metrics.border_thickness as f32;
+        let title_bar_height = self.frame_metrics.title_bar_height as f32;
+
+        // TODO: Make these configurable:
+        let min_w = border_thickness * 2.0 + 50.0;
+        let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
+        let new_rect = match dragging_hit_test {
+            HitTest::TitleBarOrDragArea => {
+                let new_x = starting_rect.x + dx;
+                let new_y = starting_rect.y + dy;
+                Rect {
+                    x: new_x,
+                    y: new_y,
+                    ..starting_rect
+                }
+            }
+            HitTest::TopBorder => {
+                let new_h = (starting_rect.h - dy).max(min_h);
+                let new_y = starting_rect.y + (starting_rect.h - new_h);
+                Rect {
+                    y: new_y,
+                    h: new_h,
+                    ..starting_rect
+                }
+            }
+            HitTest::BottomBorder => {
+                let new_h = (starting_rect.h + dy).max(min_h);
+                Rect {
+                    h: new_h,
+                    ..starting_rect
+                }
+            }
+            HitTest::LeftBorder => {
+                let new_w = (starting_rect.w - dx).max(min_w);
+                let new_x = starting_rect.x + (starting_rect.w - new_w);
+                Rect {
+                    x: new_x,
+                    w: new_w,
+                    ..starting_rect
+                }
+            }
+            HitTest::RightBorder => {
+                let new_w = (starting_rect.w + dx).max(min_w);
+                Rect {
+                    w: new_w,
+                    ..starting_rect
+                }
+            }
+            HitTest::TopLeftCorner => {
+                let new_w = (starting_rect.w - dx).max(min_w);
+                let new_h = (starting_rect.h - dy).max(min_h);
+                let new_x = starting_rect.x + (starting_rect.w - new_w);
+                let new_y = starting_rect.y + (starting_rect.h - new_h);
+                Rect {
+                    x: new_x,
+                    y: new_y,
+                    w: new_w,
+                    h: new_h,
+                }
+            }
+            HitTest::TopRightCorner => {
+                let new_h = (starting_rect.h - dy).max(min_h);
+                let new_y = starting_rect.y + (starting_rect.h - new_h);
+                let new_w = (starting_rect.w + dx).max(min_w);
+                Rect {
+                    y: new_y,
+                    w: new_w,
+                    h: new_h,
+                    ..starting_rect
+                }
+            }
+            HitTest::BottomLeftCorner => {
+                let new_w = (starting_rect.w - dx).max(min_w);
+                let new_x = starting_rect.x + (starting_rect.w - new_w);
+                let new_h = (starting_rect.h + dy).max(min_h);
+                Rect {
+                    x: new_x,
+                    w: new_w,
+                    h: new_h,
+                    ..starting_rect
+                }
+            }
+            HitTest::BottomRightCorner => {
+                let new_w = (starting_rect.w + dx).max(min_w);
+                let new_h = (starting_rect.h + dy).max(min_h);
+                Rect {
+                    w: new_w,
+                    h: new_h,
+                    ..starting_rect
+                }
+            }
+            _ => starting_rect,
+        };
+        self.set_win_rect(win_id, new_rect);
+        true
     }
 }
 
