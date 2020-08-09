@@ -103,15 +103,23 @@ impl WindowingState {
 
     pub(crate) fn ensure_all_win_in_area(&mut self) {
         for window_rect in self.window_rects.iter_mut() {
-            if window_rect.x < 0.0 {
-                window_rect.x = 0.0;
-            } else if window_rect.x + window_rect.w > self.area_size[0] {
-                window_rect.x = self.area_size[0] - window_rect.w;
+            let border_thickness = self.frame_metrics.border_thickness as f32;
+            let title_bar_height = self.frame_metrics.title_bar_height as f32;
+            if window_rect.x <= -border_thickness {
+                window_rect.x = -border_thickness;
+            } else if window_rect.x + (window_rect.w - border_thickness * 2.0) > self.area_size[0] {
+                window_rect.x = self.area_size[0] - (window_rect.w - border_thickness * 2.0);
             }
-            if window_rect.y < 0.0 {
-                window_rect.y = 0.0;
-            } else if window_rect.y + window_rect.h > self.area_size[1] {
-                window_rect.y = self.area_size[1] - window_rect.h;
+            if window_rect.w > self.area_size[0] + border_thickness * 2.0 {
+                window_rect.w = self.area_size[0] + border_thickness * 2.0;
+            }
+            if window_rect.y <= -border_thickness {
+                window_rect.y = -border_thickness;
+            } else if window_rect.y + border_thickness + title_bar_height > self.area_size[1] {
+                window_rect.y = self.area_size[1] - (border_thickness + title_bar_height);
+            }
+            if window_rect.h > self.area_size[1] + border_thickness * 2.0 {
+                window_rect.h = self.area_size[1] + border_thickness * 2.0;
             }
         }
     }
