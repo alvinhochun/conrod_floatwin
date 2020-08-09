@@ -246,10 +246,9 @@ impl WindowingState {
                 self.win_drag_end(true);
             }
         }
-        let WinId(win_idx) = win_id;
-        // Using the raw `Rect` instead of the rounded rect - we snap the Rect
-        // to device pixel only when the dragging ends.
-        let initial_rect = self.window_rects[win_idx as usize];
+        // Use the pixel-aligned `Rect` to prevent the right/bottom edge from
+        // wobbling during resize due to rounding issues.
+        let initial_rect = self.win_rect(win_id);
         self.maybe_dragging_window = Some((win_id, hit_test, initial_rect));
     }
 
@@ -276,7 +275,10 @@ impl WindowingState {
             Some(x) => x,
             None => return false,
         };
-        let [dx, dy] = offset;
+        let hidpi_factor = self.hidpi_factor as f32;
+        // Round the offset to device pixels:
+        let dx = (offset[0] * hidpi_factor).round() / hidpi_factor;
+        let dy = (offset[1] * hidpi_factor).round() / hidpi_factor;
 
         // Ensure the window being dragged is topmost.
         self.bring_to_top(win_id);
