@@ -267,15 +267,39 @@ fn window_hit_test(
         WindowPartY::Content
     };
 
+    let corner_leeway = border_thickness * 3.0;
+    let (is_near_l, is_near_r) = if x <= corner_leeway {
+        (true, false)
+    } else if x >= w - corner_leeway {
+        (false, true)
+    } else {
+        (false, false)
+    };
+    let (is_near_t, is_near_b) = if y <= corner_leeway {
+        (true, false)
+    } else if y >= h - corner_leeway {
+        (false, true)
+    } else {
+        (false, false)
+    };
+
     Some(match (window_part_x, window_part_y) {
         (WindowPartX::Content, WindowPartY::Content) => HitTest::Content,
         (WindowPartX::LeftBorder, WindowPartY::TopBorder) => HitTest::TopLeftCorner,
         (WindowPartX::RightBorder, WindowPartY::TopBorder) => HitTest::TopRightCorner,
         (WindowPartX::LeftBorder, WindowPartY::BottomBorder) => HitTest::BottomLeftCorner,
         (WindowPartX::RightBorder, WindowPartY::BottomBorder) => HitTest::BottomRightCorner,
+        (WindowPartX::LeftBorder, _) if is_near_t => HitTest::TopLeftCorner,
+        (WindowPartX::LeftBorder, _) if is_near_b => HitTest::BottomLeftCorner,
         (WindowPartX::LeftBorder, _) => HitTest::LeftBorder,
+        (WindowPartX::RightBorder, _) if is_near_t => HitTest::TopRightCorner,
+        (WindowPartX::RightBorder, _) if is_near_b => HitTest::BottomRightCorner,
         (WindowPartX::RightBorder, _) => HitTest::RightBorder,
+        (_, WindowPartY::TopBorder) if is_near_l => HitTest::TopLeftCorner,
+        (_, WindowPartY::TopBorder) if is_near_r => HitTest::TopRightCorner,
         (_, WindowPartY::TopBorder) => HitTest::TopBorder,
+        (_, WindowPartY::BottomBorder) if is_near_l => HitTest::BottomLeftCorner,
+        (_, WindowPartY::BottomBorder) if is_near_r => HitTest::BottomRightCorner,
         (_, WindowPartY::BottomBorder) => HitTest::BottomBorder,
         _ => HitTest::TitleBarOrDragArea,
     })
