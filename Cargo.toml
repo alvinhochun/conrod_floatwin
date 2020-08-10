@@ -23,6 +23,6 @@ glium = "0.27"
 winit = "0.22"
 
 [patch.crates-io]
-conrod_core = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
-conrod_glium = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
-conrod_winit = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "update-glium-winit" }
+conrod_core = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "custom" }
+conrod_glium = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "custom" }
+conrod_winit = { version = "0.70", git = "https://github.com/alvinhochun/conrod.git", branch = "custom" }
