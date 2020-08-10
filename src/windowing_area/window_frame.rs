@@ -145,7 +145,13 @@ impl<'a> Widget for WindowFrame<'a> {
         let style: Style = style;
 
         // Draw a classic frame using triangles:
-        let triangles = classic_frame::make_frame(rect.bottom_left(), rect.top_right(), frame_metrics.border_thickness);
+        let base_color = style.frame_color(ui.theme());
+        let triangles = classic_frame::make_frame(
+            rect.bottom_left(),
+            rect.top_right(),
+            frame_metrics.border_thickness,
+            base_color,
+        );
         widget::Triangles::multi_color(triangles)
             .with_bounding_rect(rect)
             .middle_of(id)

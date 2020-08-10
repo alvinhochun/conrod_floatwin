@@ -1,4 +1,4 @@
-use conrod_core::widget;
+use conrod_core::{color, widget};
 
 macro_rules! value_iter_chain{
     ($item:expr, $(,)?) => {
@@ -83,6 +83,7 @@ pub(super) fn make_frame(
     bottom_left: [f64; 2],
     top_right: [f64; 2],
     border_thickness: f64,
+    base_color: color::Color,
 ) -> impl Iterator<Item = widget::triangles::Triangle<widget::triangles::ColoredPoint>> {
     // The frame is constructed from 4 L-shapes and a rectangle, laid out as
     // follow:
@@ -101,11 +102,20 @@ pub(super) fn make_frame(
     // If we consider the thickness of the L-shapes to be 1 unit, the actual
     // border of the frame will be 4 units.
 
-    let lower_a_color = conrod_core::color::Rgba(0.0, 0.0, 0.0, 1.0);
-    let upper_a_color = conrod_core::color::Rgba(0.875, 0.875, 0.875, 1.0);
-    let lower_b_color = conrod_core::color::Rgba(0.5, 0.5, 0.5, 1.0);
-    let upper_b_color = conrod_core::color::Rgba(1.0, 1.0, 1.0, 1.0);
-    let inside_color = conrod_core::color::Rgba(0.75, 0.75, 0.75, 1.0);
+    let hsla = base_color.to_hsl();
+    let alpha = hsla.3;
+
+    // The original colors are greyscale with luminance of:
+    //     0.0, 0.875, 0.5, 1.0, 0.75
+    // We treat the base colour as the fifth colour and scale the other colours
+    // based on the original scales --
+    //     0.875 = (1.0 - 0.75) / 2.0 + 0.75
+    //     0.5 = 0.75 / 1.5
+    let lower_a_color = color::Rgba(0.0, 0.0, 0.0, alpha);
+    let upper_a_color = color::hsla(hsla.0, hsla.1, (1.0 - hsla.2) / 2.0 + hsla.2, alpha).to_rgb();
+    let lower_b_color = color::hsla(hsla.0, hsla.1, hsla.2 / 1.5, alpha).to_rgb();
+    let upper_b_color = color::Rgba(1.0, 1.0, 1.0, alpha);
+    let inside_color = base_color.to_rgb();
 
     let double_line_thickness = border_thickness / 2.0;
     let line_thickness = double_line_thickness / 2.0;
