@@ -370,7 +370,7 @@ impl<'a> WindowingContext<'a> {
         };
         WindowFrame::new(self.frame_metrics)
             .title(title)
-            .frame_color(conrod_core::color::LIGHT_CHARCOAL)
+            .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
             .wh(conrod_window_rect.dim())
