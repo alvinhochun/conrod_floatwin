@@ -157,7 +157,7 @@ fn set_widgets(
         });
     }
     widget::Rectangle::fill(ui.window_dim())
-        .color(conrod_core::color::LIGHT_GREY)
+        .color(conrod_core::color::BLUE)
         .middle()
         .set(ids.backdrop, ui);
     let win_ctx: WindowingContext =
