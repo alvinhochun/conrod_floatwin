@@ -9,6 +9,8 @@ use conrod_core::{
 };
 use widget::KidAreaArgs;
 
+mod classic_frame;
+
 #[derive(WidgetCommon)]
 pub struct WindowFrame<'a> {
     #[conrod(common_builder)]
@@ -142,8 +144,10 @@ impl<'a> Widget for WindowFrame<'a> {
         } = self;
         let style: Style = style;
 
-        // Rectangle for the window frame (the content is paint over it).
-        widget::Rectangle::fill_with(rect.dim(), style.frame_color(ui.theme()))
+        // Draw a classic frame using triangles:
+        let triangles = classic_frame::make_frame(rect.bottom_left(), rect.top_right(), frame_metrics.border_thickness);
+        widget::Triangles::multi_color(triangles)
+            .with_bounding_rect(rect)
             .middle_of(id)
             .graphics_for(id)
             .place_on_kid_area(false)
