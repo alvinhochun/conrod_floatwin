@@ -261,6 +261,26 @@ impl<'a> Widget for WindowingArea<'a> {
                             });
                         }
                     }
+                    conrod_core::event::Ui::DoubleClick(
+                        Some(dblclick),
+                        conrod_core::event::DoubleClick {
+                            button: conrod_core::input::MouseButton::Left,
+                            xy,
+                            ..
+                        },
+                    ) => {
+                        if let Some(topmost_win_id) = windowing_state
+                            .topmost_win()
+                            .filter(|win| state.ids.window_frames[win.0 as usize] == *dblclick)
+                        {
+                            let pos = util::conrod_point_to_layout_pos(*xy, rect);
+                            let ht = windowing_state.specific_win_hit_test(topmost_win_id, pos);
+                            if ht == Some(layout::HitTest::TitleBarOrDragArea) {
+                                let is_collapsed = windowing_state.win_is_collapsed(topmost_win_id);
+                                windowing_state.set_win_collapsed(topmost_win_id, !is_collapsed);
+                            }
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -294,12 +314,14 @@ impl<'a> Widget for WindowingArea<'a> {
                                     mouse_widget == state.ids.window_frames[win_id.0 as usize]
                                 }
                             })
-                            .map(|(_, ht)| {
-                                if is_drag_move_window {
-                                    layout::HitTest::TitleBarOrDragArea
-                                } else {
-                                    ht
+                            .map(|(win_id, ht)| match ht {
+                                _ if is_drag_move_window => layout::HitTest::TitleBarOrDragArea,
+                                layout::HitTest::TitleBarOrDragArea => ht,
+                                _ if windowing_state.win_is_collapsed(win_id) => {
+                                    // Can't resize collapsed windows.
+                                    layout::HitTest::Content
                                 }
+                                _ => ht,
                             })
                     })
             })
@@ -359,8 +381,9 @@ impl<'a> WindowingContext<'a> {
         let window_frame_id = state.ids.window_frames[win_idx];
         let content_widget_id = state.ids.window_contents[win_idx];
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
+        let window_is_collapsed = self.windowing_state.win_is_collapsed(win_id);
         let conrod_window_rect = {
-            let [x, y, w, h] = self.windowing_state.win_rect_f64(win_id);
+            let [x, y, w, h] = self.windowing_state.win_display_rect_f64(win_id);
             let [left, top] = self.windowing_area_rect.top_left();
             let x1 = left + x;
             let y1 = top - y;
@@ -377,6 +400,9 @@ impl<'a> WindowingContext<'a> {
             .depth(window_depth)
             .parent(self.windowing_area_id)
             .set(window_frame_id, ui);
+        if window_is_collapsed {
+            return None;
+        }
         Some(WindowSetter {
             window_frame_id,
             content_widget_id,
