@@ -47,8 +47,8 @@ fn main() {
     // Instantiate the windowing state.
     let mut win_state = WindowingState::new();
     let mut win_ids = WinIds {
-        test1: win_state.add(100.0, 100.0, 150.0, 100.0),
-        test2: win_state.add(150.0, 150.0, 200.0, 200.0),
+        test1: win_state.next_id(),
+        test2: win_state.next_id(),
         test_array: Vec::new(),
     };
     let mut array_win_count = 0;
@@ -138,16 +138,22 @@ fn set_widgets(
 ) {
     if win_ids.test_array.len() < *array_win_count {
         win_ids.test_array.resize_with(*array_win_count, || {
-            win_state.add(150.0, 120.0, 100.0, 100.0)
+            win_state.next_id()
         });
     }
     widget::Rectangle::fill(ui.window_dim())
         .color(conrod_core::color::BLUE)
         .middle()
         .set(ids.backdrop, ui);
-    let win_ctx: WindowingContext =
+    let mut win_ctx: WindowingContext =
         WindowingArea::new(win_state, hidpi_factor).set(ids.windowing_area, ui);
-    if let Some(win) = win_ctx.make_window("Test1", win_ids.test1, ui) {
+    if let Some(win) = win_ctx.make_window(
+        "Test1",
+        Some([100.0, 100.0]),
+        [150.0, 100.0],
+        win_ids.test1,
+        ui,
+    ) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_YELLOW)
@@ -160,7 +166,13 @@ fn set_widgets(
             .set(ids.text, ui);
     }
     let mut add_win = 0;
-    if let Some(win) = win_ctx.make_window("Test2", win_ids.test2, ui) {
+    if let Some(win) = win_ctx.make_window(
+        "Test2",
+        Some([150.0, 150.0]),
+        [200.0, 200.0],
+        win_ids.test2,
+        ui,
+    ) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_BLUE)
@@ -179,7 +191,7 @@ fn set_widgets(
     }
     for (i, &win_id) in win_ids.test_array.iter().enumerate() {
         let title = format!("Test multi - {}", i);
-        if let Some(win) = win_ctx.make_window(&title, win_id, ui) {
+        if let Some(win) = win_ctx.make_window(&title, None, [100.0, 100.0], win_id, ui) {
             let c = widget::Canvas::new()
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
