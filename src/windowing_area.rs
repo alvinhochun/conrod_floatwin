@@ -222,20 +222,21 @@ impl<'a> Widget for WindowingArea<'a> {
                                     });
                                 eprintln!("drag start on {:?}", ht);
                                 if let Some(ht) = ht {
-                                    windowing_state.win_drag_start(topmost_win_id, ht);
-                                    true
+                                    windowing_state.win_drag_start(topmost_win_id, ht)
                                 } else {
                                     false
                                 }
                             });
-                            if is_dragging_win {
+                            let new_is_dragging_win = if is_dragging_win {
                                 let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
                                 let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
-                                windowing_state.win_drag_update([drag_delta_x, drag_delta_y]);
-                            }
-                            if state.maybe_dragging_win != Some(is_dragging_win) {
+                                windowing_state.win_drag_update([drag_delta_x, drag_delta_y])
+                            } else {
+                                false
+                            };
+                            if state.maybe_dragging_win != Some(new_is_dragging_win) {
                                 state.update(|state| {
-                                    state.maybe_dragging_win = Some(is_dragging_win);
+                                    state.maybe_dragging_win = Some(new_is_dragging_win);
                                 });
                             }
                         }
