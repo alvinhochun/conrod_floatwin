@@ -45,7 +45,7 @@ pub struct WindowingState {
     window_z_orders: Vec<u32>,
     bottom_to_top_list: Vec<WinId>,
     frame_metrics: FrameMetrics,
-    maybe_dragging_window: Option<(WinId, HitTest, Rect)>,
+    maybe_dragging_window: Option<DraggingState>,
     next_auto_position: [f32; 2],
 }
 
@@ -68,6 +68,12 @@ pub(crate) struct FrameMetrics {
     /// The window width of a collapsed window. This includes the borders on
     /// both sides.
     pub(crate) collapsed_win_width: f64,
+}
+
+struct DraggingState {
+    win_id: WinId,
+    dragging_hit_test: HitTest,
+    starting_rect: Rect,
 }
 
 impl FrameMetrics {
@@ -380,8 +386,12 @@ impl WindowingState {
         }
     }
 
-    pub fn win_drag_start(&mut self, win_id: WinId, hit_test: HitTest) -> bool {
-        if let Some((dragging_win_id, _, _)) = self.maybe_dragging_window {
+    pub fn win_drag_start(&mut self, win_id: WinId, dragging_hit_test: HitTest) -> bool {
+        if let Some(DraggingState {
+            win_id: dragging_win_id,
+            ..
+        }) = self.maybe_dragging_window
+        {
             if dragging_win_id == win_id {
                 // Trying to drag the same window? Just continue dragging...
                 self.win_drag_end(false);
@@ -389,7 +399,7 @@ impl WindowingState {
                 self.win_drag_end(true);
             }
         }
-        match hit_test {
+        match dragging_hit_test {
             HitTest::TopBorder
             | HitTest::LeftBorder
             | HitTest::RightBorder
@@ -407,16 +417,24 @@ impl WindowingState {
         }
         // Use the pixel-aligned `Rect` to prevent the right/bottom edge from
         // wobbling during resize due to rounding issues.
-        let initial_rect = match self.win_normal_rect(win_id) {
+        let starting_rect = match self.win_normal_rect(win_id) {
             Some(x) => x,
             None => return false,
         };
-        self.maybe_dragging_window = Some((win_id, hit_test, initial_rect));
+        self.maybe_dragging_window = Some(DraggingState {
+            win_id,
+            dragging_hit_test,
+            starting_rect,
+        });
         true
     }
 
     pub fn win_drag_end(&mut self, abort: bool) {
-        let (win_id, _, starting_rect) = match self.maybe_dragging_window.take() {
+        let DraggingState {
+            win_id,
+            starting_rect,
+            ..
+        } = match self.maybe_dragging_window.take() {
             Some(x) => x,
             None => return,
         };
@@ -432,11 +450,16 @@ impl WindowingState {
 
     pub fn current_dragging_win(&self) -> Option<(WinId, HitTest)> {
         self.maybe_dragging_window
-            .map(|(win_id, ht, _)| (win_id, ht))
+            .as_ref()
+            .map(|dragging| (dragging.win_id, dragging.dragging_hit_test))
     }
 
     pub fn win_drag_update(&mut self, offset: [f32; 2]) -> bool {
-        let (win_id, dragging_hit_test, starting_rect) = match self.maybe_dragging_window {
+        let &DraggingState {
+            win_id,
+            dragging_hit_test,
+            starting_rect,
+        } = match self.maybe_dragging_window.as_ref() {
             Some(x) => x,
             None => return false,
         };
