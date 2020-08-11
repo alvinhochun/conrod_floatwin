@@ -388,9 +388,26 @@ impl WindowingState {
         let border_thickness = self.frame_metrics.border_thickness as f32;
         let title_bar_height = self.frame_metrics.title_bar_height as f32;
 
+        let [area_w, area_h] = self.area_size;
+        let (win_display_w, win_display_h) = {
+            let r = self.win_display_rect(win_id);
+            (r.w, r.h)
+        };
+
         // TODO: Make these configurable:
         let min_w = border_thickness * 2.0 + 50.0;
         let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
+        let snap_threshold = (12.0 * hidpi_factor).round() / hidpi_factor;
+        let snap_margin = (8.0 * hidpi_factor).round() / hidpi_factor;
+
+        let snap_move = |mut pos: f32, dim: f32, lower_edge: f32, upper_edge: f32| {
+            if (pos - (lower_edge + snap_margin)).abs() < snap_threshold {
+                pos = lower_edge + snap_margin;
+            } else if (pos + dim - (upper_edge - snap_margin)).abs() < snap_threshold {
+                pos = upper_edge - snap_margin - dim;
+            }
+            pos
+        };
 
         // Calculate horizontal dimensions:
         let (new_x, new_w);
@@ -400,7 +417,7 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = starting_rect.x + dx;
+                new_x = snap_move(starting_rect.x + dx, win_display_w, 0.0, area_w);
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
@@ -421,7 +438,7 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = starting_rect.y + dy;
+                new_y = snap_move(starting_rect.y + dy, win_display_h, 0.0, area_h);
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
