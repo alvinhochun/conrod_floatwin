@@ -364,11 +364,19 @@ impl<'a> Widget for WindowingArea<'a> {
 
 impl<'a> WindowingContext<'a> {
     pub fn make_window<'c>(
-        &self,
+        &mut self,
         title: &'c str,
+        initial_position: Option<[f32; 2]>,
+        initial_size: [f32; 2],
         win_id: WinId,
         ui: &mut UiCell,
     ) -> Option<WindowSetter> {
+        self.windowing_state
+            .ensure_init(win_id, || layout::WindowInitialState {
+                client_size: initial_size,
+                position: initial_position,
+                is_collapsed: false,
+            });
         let state: &State = match ui
             .widget_graph()
             .widget(self.windowing_area_id)
@@ -384,7 +392,7 @@ impl<'a> WindowingContext<'a> {
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
         let window_is_collapsed = self.windowing_state.win_is_collapsed(win_id);
         let conrod_window_rect = {
-            let [x, y, w, h] = self.windowing_state.win_display_rect_f64(win_id);
+            let [x, y, w, h] = self.windowing_state.win_display_rect_f64(win_id)?;
             let [left, top] = self.windowing_area_rect.top_left();
             let x1 = left + x;
             let y1 = top - y;
