@@ -43,6 +43,7 @@ pub struct WindowingState {
     hidpi_factor: f64,
     window_rects: Vec<Rect>,
     window_z_orders: Vec<u32>,
+    window_collapsed: Vec<bool>,
     bottom_to_top_list: Vec<WinId>,
     frame_metrics: FrameMetrics,
     maybe_dragging_window: Option<(WinId, HitTest, Rect)>,
@@ -53,6 +54,9 @@ pub(crate) struct FrameMetrics {
     pub(crate) border_thickness: f64,
     pub(crate) title_bar_height: f64,
     pub(crate) gap_below_title_bar: f64,
+    /// The window width of a collapsed window. This includes the borders on
+    /// both sides.
+    pub(crate) collapsed_win_width: f64,
 }
 
 impl FrameMetrics {
@@ -60,6 +64,7 @@ impl FrameMetrics {
         let border_thickness;
         let title_bar_height;
         let gap_below_title_bar;
+        let collapsed_win_width;
         if hidpi_factor < 1.51 {
             border_thickness = 4.0 / hidpi_factor;
             gap_below_title_bar = 1.0 / hidpi_factor;
@@ -68,16 +73,21 @@ impl FrameMetrics {
             gap_below_title_bar = 1.0 * hidpi_factor.round() / hidpi_factor;
         }
         title_bar_height = (20.0 * hidpi_factor).round() / hidpi_factor;
+        collapsed_win_width =
+            (150.0 * hidpi_factor + border_thickness * hidpi_factor * 2.0).round() / hidpi_factor;
         eprintln!(
-            "{:?}, {:?}, {:?}",
+            "{:?} - {:?}, {:?}, {:?}, {:?}",
+            hidpi_factor,
             border_thickness * hidpi_factor,
             title_bar_height * hidpi_factor,
-            gap_below_title_bar * hidpi_factor
+            gap_below_title_bar * hidpi_factor,
+            collapsed_win_width * hidpi_factor,
         );
         dbg!(Self {
             border_thickness,
             title_bar_height,
             gap_below_title_bar,
+            collapsed_win_width,
         })
     }
 }
@@ -89,6 +99,7 @@ impl WindowingState {
             hidpi_factor: 1.0,
             window_rects: Vec::new(),
             window_z_orders: Vec::new(),
+            window_collapsed: Vec::new(),
             bottom_to_top_list: Vec::new(),
             frame_metrics: FrameMetrics::with_hidpi_factor(1.0),
             maybe_dragging_window: None,
@@ -104,15 +115,27 @@ impl WindowingState {
     }
 
     pub(crate) fn ensure_all_win_in_area(&mut self) {
-        for window_rect in self.window_rects.iter_mut() {
+        for (window_rect, &is_collapsed) in self
+            .window_rects
+            .iter_mut()
+            .zip(self.window_collapsed.iter())
+        {
             let border_thickness = self.frame_metrics.border_thickness as f32;
             let title_bar_height = self.frame_metrics.title_bar_height as f32;
+            let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
             if window_rect.x <= -border_thickness {
                 window_rect.x = -border_thickness;
-            } else if window_rect.x + (window_rect.w - border_thickness * 2.0) > self.area_size[0] {
-                window_rect.x = self.area_size[0] - (window_rect.w - border_thickness * 2.0);
+            } else {
+                let width_to_test = if is_collapsed {
+                    collapsed_win_width - border_thickness
+                } else {
+                    window_rect.w - border_thickness
+                };
+                if window_rect.x + width_to_test > self.area_size[0] {
+                    window_rect.x = self.area_size[0] - width_to_test;
+                }
             }
-            if window_rect.w > self.area_size[0] + border_thickness * 2.0 {
+            if !is_collapsed && window_rect.w > self.area_size[0] + border_thickness * 2.0 {
                 window_rect.w = self.area_size[0] + border_thickness * 2.0;
             }
             if window_rect.y <= -border_thickness {
@@ -120,7 +143,7 @@ impl WindowingState {
             } else if window_rect.y + border_thickness + title_bar_height > self.area_size[1] {
                 window_rect.y = self.area_size[1] - (border_thickness + title_bar_height);
             }
-            if window_rect.h > self.area_size[1] + border_thickness * 2.0 {
+            if !is_collapsed && window_rect.h > self.area_size[1] + border_thickness * 2.0 {
                 window_rect.h = self.area_size[1] + border_thickness * 2.0;
             }
         }
@@ -130,6 +153,7 @@ impl WindowingState {
         let id = self.window_rects.len() as u32;
         self.window_rects.push(Rect { x, y, w, h });
         self.window_z_orders.push(id);
+        self.window_collapsed.push(false);
         let win_id = WinId(id);
         self.bottom_to_top_list.push(win_id);
         win_id
@@ -165,8 +189,13 @@ impl WindowingState {
     }
 
     pub fn specific_win_hit_test(&self, win_id: WinId, pos: [f32; 2]) -> Option<HitTest> {
-        let WinId(win_id) = win_id;
-        let win_rect = &self.window_rects[win_id as usize];
+        let WinId(win_idx) = win_id;
+        let is_collapsed = self.win_is_collapsed(win_id);
+        let win_rect = if is_collapsed {
+            self.win_display_rect(win_id)
+        } else {
+            self.window_rects[win_idx as usize]
+        };
         let x = pos[0] - win_rect.x;
         let y = pos[1] - win_rect.y;
         let w = win_rect.w;
@@ -178,11 +207,11 @@ impl WindowingState {
         self.bottom_to_top_list.last().copied()
     }
 
-    /// Retrieves the `Rect` of a window. The `Rect` is adjusted to align to
-    /// the physical pixel grid. Note that since the returned `Rect` contains
-    /// f32 dimensions, it may not suitable for use with GUI toolkits that uses
-    /// f64 internally due to the limited precision.
-    pub fn win_rect(&self, win_id: WinId) -> Rect {
+    /// Retrieves the `Rect` of a window in its normal state. The `Rect` is
+    /// adjusted to align to the physical pixel grid. Note that since the
+    /// returned `Rect` contains f32 dimensions, it may not suitable for use
+    /// with GUI toolkits that use f64 internally due to the limited precision.
+    pub fn win_normal_rect(&self, win_id: WinId) -> Rect {
         let WinId(win_idx) = win_id;
         let rect = self.window_rects[win_idx as usize];
         let hidpi_factor = self.hidpi_factor as f32;
@@ -194,11 +223,11 @@ impl WindowingState {
         }
     }
 
-    /// Retrieves the x, y, width and height of a window. The dimensions are
-    /// adjusted to align to the physical pixel grid. The calculations use f64
-    /// so that the results are precise enough for GUI toolkits that uses f64
-    /// internally.
-    pub fn win_rect_f64(&self, win_id: WinId) -> [f64; 4] {
+    /// Retrieves the x, y, width and height of a window in its normal state.
+    /// The dimensions are adjusted to align to the physical pixel grid. The
+    /// calculations use f64 so that the results are precise enough for GUI
+    /// toolkits that use f64 internally.
+    pub fn win_normal_rect_f64(&self, win_id: WinId) -> [f64; 4] {
         let WinId(win_idx) = win_id;
         let rect = self.window_rects[win_idx as usize];
         let hidpi_factor = self.hidpi_factor;
@@ -210,9 +239,65 @@ impl WindowingState {
         ]
     }
 
-    pub(crate) fn set_win_rect(&mut self, win_id: WinId, rect: Rect) {
+    /// Retrieves the `Rect` of a window for display. The `Rect` is adjusted to
+    /// align to the physical pixel grid. Note that since the returned `Rect`
+    /// contains f32 dimensions, it may not suitable for use with GUI toolkits
+    /// that use f64 internally due to the limited precision.
+    pub fn win_display_rect(&self, win_id: WinId) -> Rect {
+        if self.win_is_collapsed(win_id) {
+            let WinId(win_idx) = win_id;
+            let rect = self.window_rects[win_idx as usize];
+            let hidpi_factor = self.hidpi_factor as f32;
+            let border_thickness = self.frame_metrics.border_thickness as f32;
+            let title_bar_height = self.frame_metrics.title_bar_height as f32;
+            let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
+            Rect {
+                x: (rect.x * hidpi_factor).round() / hidpi_factor,
+                y: (rect.y * hidpi_factor).round() / hidpi_factor,
+                w: collapsed_win_width,
+                h: title_bar_height + border_thickness * 2.0,
+            }
+        } else {
+            self.win_normal_rect(win_id)
+        }
+    }
+
+    /// Retrieves the x, y, width and height of a window for display. The
+    /// dimensions are adjusted to align to the physical pixel grid. The
+    /// calculations use f64 so that the results are precise enough for GUI
+    /// toolkits that use f64 internally.
+    pub fn win_display_rect_f64(&self, win_id: WinId) -> [f64; 4] {
+        if self.win_is_collapsed(win_id) {
+            let WinId(win_idx) = win_id;
+            let rect = self.window_rects[win_idx as usize];
+            let hidpi_factor = self.hidpi_factor;
+            let border_thickness = self.frame_metrics.border_thickness;
+            let title_bar_height = self.frame_metrics.title_bar_height;
+            let collapsed_win_width = self.frame_metrics.collapsed_win_width;
+            [
+                (rect.x as f64 * hidpi_factor).round() / hidpi_factor,
+                (rect.y as f64 * hidpi_factor).round() / hidpi_factor,
+                collapsed_win_width,
+                title_bar_height + border_thickness * 2.0,
+            ]
+        } else {
+            self.win_normal_rect_f64(win_id)
+        }
+    }
+
+    pub(crate) fn set_win_normal_rect(&mut self, win_id: WinId, rect: Rect) {
         let WinId(win_idx) = win_id;
         self.window_rects[win_idx as usize] = rect;
+    }
+
+    pub fn win_is_collapsed(&self, win_id: WinId) -> bool {
+        let WinId(win_idx) = win_id;
+        self.window_collapsed[win_idx as usize]
+    }
+
+    pub(crate) fn set_win_collapsed(&mut self, win_id: WinId, is_collapsed: bool) {
+        let WinId(win_idx) = win_id;
+        self.window_collapsed[win_idx as usize] = is_collapsed;
     }
 
     pub fn win_z_order(&self, win_id: WinId) -> u32 {
@@ -237,7 +322,7 @@ impl WindowingState {
         }
     }
 
-    pub fn win_drag_start(&mut self, win_id: WinId, hit_test: HitTest) {
+    pub fn win_drag_start(&mut self, win_id: WinId, hit_test: HitTest) -> bool {
         if let Some((dragging_win_id, _, _)) = self.maybe_dragging_window {
             if dragging_win_id == win_id {
                 // Trying to drag the same window? Just continue dragging...
@@ -246,10 +331,27 @@ impl WindowingState {
                 self.win_drag_end(true);
             }
         }
+        match hit_test {
+            HitTest::TopBorder
+            | HitTest::LeftBorder
+            | HitTest::RightBorder
+            | HitTest::BottomBorder
+            | HitTest::TopLeftCorner
+            | HitTest::TopRightCorner
+            | HitTest::BottomLeftCorner
+            | HitTest::BottomRightCorner
+                if self.win_is_collapsed(win_id) =>
+            {
+                // Just don't allow resizing a collapsed window.
+                return false;
+            }
+            _ => {}
+        }
         // Use the pixel-aligned `Rect` to prevent the right/bottom edge from
         // wobbling during resize due to rounding issues.
-        let initial_rect = self.win_rect(win_id);
+        let initial_rect = self.win_normal_rect(win_id);
         self.maybe_dragging_window = Some((win_id, hit_test, initial_rect));
+        true
     }
 
     pub fn win_drag_end(&mut self, abort: bool) {
@@ -258,10 +360,10 @@ impl WindowingState {
             None => return,
         };
         if abort {
-            self.set_win_rect(win_id, starting_rect);
+            self.set_win_normal_rect(win_id, starting_rect);
         } else {
             // Round to device pixel.
-            self.set_win_rect(win_id, self.win_rect(win_id));
+            self.set_win_normal_rect(win_id, self.win_normal_rect(win_id));
         }
     }
 
@@ -338,7 +440,7 @@ impl WindowingState {
             w: new_w,
             h: new_h,
         };
-        self.set_win_rect(win_id, new_rect);
+        self.set_win_normal_rect(win_id, new_rect);
         true
     }
 }
