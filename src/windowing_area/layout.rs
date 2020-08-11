@@ -488,41 +488,40 @@ impl WindowingState {
         let snap_threshold = (12.0 * hidpi_factor).round() / hidpi_factor;
         let snap_margin = (8.0 * hidpi_factor).round() / hidpi_factor;
 
-        let snap_move = |mut pos: f32, dim: f32, lower_edge: f32, upper_edge: f32| {
+        let snap_move = |pos: f32, dim: f32, lower_edge: f32, upper_edge: f32| {
             if (pos - (lower_edge + snap_margin)).abs() < snap_threshold {
-                pos = lower_edge + snap_margin;
+                Some(lower_edge + snap_margin)
             } else if (pos + dim - (upper_edge - snap_margin)).abs() < snap_threshold {
-                pos = upper_edge - snap_margin - dim;
+                Some(upper_edge - snap_margin - dim)
+            } else {
+                None
             }
-            pos
         };
         let snap_resize_upper = |pos: f32, dim: f32, edge: f32, min_dim: f32| {
-            let mut target_dim = dim;
             // Snap the border to edge if within threshold.
-            if (pos + target_dim - (edge - snap_margin)).abs() < snap_threshold {
-                target_dim = edge - snap_margin - pos;
-            }
-            // If the dimensions will end up exceeding limits, apply the
-            // limits instead and don't snap.
-            if target_dim < min_dim {
-                dim.max(min_dim)
+            if (pos + dim - (edge - snap_margin)).abs() < snap_threshold {
+                let target_dim = edge - snap_margin - pos;
+                if target_dim < min_dim {
+                    None
+                } else {
+                    Some(target_dim)
+                }
             } else {
-                target_dim
+                None
             }
         };
         let snap_resize_lower = |pos: f32, other_pos: f32, edge: f32, min_dim: f32| {
-            let mut target_pos = pos;
             // Snap the border to edge if within threshold.
-            if (target_pos - (edge + snap_margin)).abs() < snap_threshold {
-                target_pos = edge + snap_margin;
+            if (pos - (edge + snap_margin)).abs() < snap_threshold {
+                let target_pos = edge + snap_margin;
+                if (other_pos - target_pos) < min_dim {
+                    None
+                } else {
+                    Some(target_pos)
+                }
+            } else {
+                None
             }
-            // If the dimensions will end up exceeding limits, apply the
-            // limits instead and don't snap.
-            if (other_pos - target_pos) < min_dim {
-                let target_dim = (other_pos - pos).max(min_dim);
-                target_pos = other_pos - target_dim;
-            }
-            target_pos
         };
 
         // Calculate horizontal dimensions:
@@ -533,7 +532,8 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = snap_move(starting_rect.x + dx, win_display_w, 0.0, area_w);
+                new_x = snap_move(starting_rect.x + dx, win_display_w, 0.0, area_w)
+                    .unwrap_or(starting_rect.x + dx);
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
@@ -542,12 +542,16 @@ impl WindowingState {
                     starting_rect.x + starting_rect.w,
                     0.0,
                     min_w,
-                );
+                )
+                .unwrap_or_else(|| {
+                    starting_rect.x + starting_rect.w - (starting_rect.w - dx).max(min_w)
+                });
                 new_w = starting_rect.w + starting_rect.x - new_x;
             }
             HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
                 new_x = starting_rect.x;
-                new_w = snap_resize_upper(starting_rect.x, starting_rect.w + dx, area_w, min_w);
+                new_w = snap_resize_upper(starting_rect.x, starting_rect.w + dx, area_w, min_w)
+                    .unwrap_or_else(|| (starting_rect.w + dx).max(min_w));
             }
         }
 
@@ -559,7 +563,8 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = snap_move(starting_rect.y + dy, win_display_h, 0.0, area_h);
+                new_y = snap_move(starting_rect.y + dy, win_display_h, 0.0, area_h)
+                    .unwrap_or(starting_rect.y + dy);
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
@@ -568,12 +573,16 @@ impl WindowingState {
                     starting_rect.y + starting_rect.h,
                     0.0,
                     min_h,
-                );
+                )
+                .unwrap_or_else(|| {
+                    starting_rect.y + starting_rect.h - (starting_rect.h - dy).max(min_h)
+                });
                 new_h = starting_rect.h + starting_rect.y - new_y;
             }
             HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
                 new_y = starting_rect.y;
-                new_h = snap_resize_upper(starting_rect.y, starting_rect.h + dy, area_h, min_h);
+                new_h = snap_resize_upper(starting_rect.y, starting_rect.h + dy, area_h, min_h)
+                    .unwrap_or_else(|| (starting_rect.h + dy).max(min_h));
             }
         }
 
