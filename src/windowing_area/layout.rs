@@ -473,6 +473,34 @@ impl WindowingState {
             }
             pos
         };
+        let snap_resize_upper = |pos: f32, dim: f32, edge: f32, min_dim: f32| {
+            let mut target_dim = dim;
+            // Snap the border to edge if within threshold.
+            if (pos + target_dim - (edge - snap_margin)).abs() < snap_threshold {
+                target_dim = edge - snap_margin - pos;
+            }
+            // If the dimensions will end up exceeding limits, apply the
+            // limits instead and don't snap.
+            if target_dim < min_dim {
+                dim.max(min_dim)
+            } else {
+                target_dim
+            }
+        };
+        let snap_resize_lower = |pos: f32, other_pos: f32, edge: f32, min_dim: f32| {
+            let mut target_pos = pos;
+            // Snap the border to edge if within threshold.
+            if (target_pos - (edge + snap_margin)).abs() < snap_threshold {
+                target_pos = edge + snap_margin;
+            }
+            // If the dimensions will end up exceeding limits, apply the
+            // limits instead and don't snap.
+            if (other_pos - target_pos) < min_dim {
+                let target_dim = (other_pos - pos).max(min_dim);
+                target_pos = other_pos - target_dim;
+            }
+            target_pos
+        };
 
         // Calculate horizontal dimensions:
         let (new_x, new_w);
@@ -486,12 +514,17 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
-                new_w = (starting_rect.w - dx).max(min_w);
-                new_x = starting_rect.x + (starting_rect.w - new_w);
+                new_x = snap_resize_lower(
+                    starting_rect.x + dx,
+                    starting_rect.x + starting_rect.w,
+                    0.0,
+                    min_w,
+                );
+                new_w = starting_rect.w + starting_rect.x - new_x;
             }
             HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
                 new_x = starting_rect.x;
-                new_w = (starting_rect.w + dx).max(min_w);
+                new_w = snap_resize_upper(starting_rect.x, starting_rect.w + dx, area_w, min_w);
             }
         }
 
@@ -507,12 +540,17 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
-                new_h = (starting_rect.h - dy).max(min_h);
-                new_y = starting_rect.y + (starting_rect.h - new_h);
+                new_y = snap_resize_lower(
+                    starting_rect.y + dy,
+                    starting_rect.y + starting_rect.h,
+                    0.0,
+                    min_h,
+                );
+                new_h = starting_rect.h + starting_rect.y - new_y;
             }
             HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
                 new_y = starting_rect.y;
-                new_h = (starting_rect.h + dy).max(min_h);
+                new_h = snap_resize_upper(starting_rect.y, starting_rect.h + dy, area_h, min_h);
             }
         }
 
