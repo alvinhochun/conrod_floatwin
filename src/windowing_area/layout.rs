@@ -1,3 +1,5 @@
+mod snapping;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Rect {
     pub x: f32,
@@ -82,6 +84,10 @@ struct DraggingState {
     win_id: WinId,
     dragging_hit_test: HitTest,
     starting_rect: RectInt,
+    snap_candidates_x: Vec<(WinId, snapping::SnapSegment)>,
+    last_snapped_x: Option<u32>,
+    snap_candidates_y: Vec<(WinId, snapping::SnapSegment)>,
+    last_snapped_y: Option<u32>,
 }
 
 impl FrameMetrics {
@@ -342,6 +348,28 @@ impl WindowingState {
         }
     }
 
+    /// Retrieves the `RectInt` of a window for display. The `RectInt` is in
+    /// unscaled physical pixels.
+    pub fn win_display_rect_int(&self, win_id: WinId) -> Option<RectInt> {
+        let WinId(win_idx) = win_id;
+        let win = self.window_states[win_idx as usize].as_ref()?;
+        if win.is_collapsed {
+            let rect = win.rect;
+            let hidpi_factor = self.hidpi_factor as f32;
+            let border_thickness = self.frame_metrics.border_thickness as f32;
+            let title_bar_height = self.frame_metrics.title_bar_height as f32;
+            let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
+            Some(RectInt {
+                x: (rect.x * hidpi_factor).round() as i32,
+                y: (rect.y * hidpi_factor).round() as i32,
+                w: (collapsed_win_width * hidpi_factor).round() as i32,
+                h: ((title_bar_height + border_thickness * 2.0) * hidpi_factor).round() as i32,
+            })
+        } else {
+            self.win_normal_rect_int(win_id)
+        }
+    }
+
     /// Retrieves the x, y, width and height of a window for display. The
     /// dimensions are adjusted to align to the physical pixel grid. The
     /// calculations use f64 so that the results are precise enough for GUI
@@ -457,10 +485,145 @@ impl WindowingState {
             Some(x) => x,
             None => return false,
         };
+
+        let hidpi_factor = self.hidpi_factor as f32;
+        let snap_margin = (8.0 * hidpi_factor).round() as i32;
+        let (win_display_w, win_display_h) = {
+            match self.win_display_rect_int(win_id) {
+                Some(r) => (r.w, r.h),
+                None => return false,
+            }
+        };
+
+        // Gather a list of borders of other windows that could
+        // possibly be snapped to.
+        // TODO: Possible optimization by filtering out impossible borders.
+        let base_iter = self
+            .window_states
+            .iter()
+            .enumerate()
+            .filter_map(|(i, _)| {
+                let i_win_id = WinId(i as u32);
+                if i_win_id != win_id {
+                    Some(i_win_id)
+                } else {
+                    None
+                }
+            })
+            .filter_map(|win_id| {
+                let rect = self.win_display_rect_int(win_id)?;
+                Some((win_id, rect))
+            });
+        let x_iter = base_iter.clone().map(|(win_id, rect)| {
+            let dim_range = snapping::DimRange::new(rect.y, rect.y + rect.h);
+            (win_id, rect, dim_range)
+        });
+        let y_iter = base_iter.map(|(win_id, rect)| {
+            let dim_range = snapping::DimRange::new(rect.x, rect.x + rect.w);
+            (win_id, rect, dim_range)
+        });
+        let snap_candidates_x;
+        match dragging_hit_test {
+            HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
+                // Nothing to snap in the x direction.
+                snap_candidates_x = Vec::new();
+            }
+            HitTest::TitleBarOrDragArea => {
+                // Gather a list of all left and right borders.
+                snap_candidates_x = x_iter
+                    .flat_map(|(win_id, rect, dim_range)| {
+                        std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.x - snap_margin - win_display_w,
+                                dim_range,
+                            ),
+                        ))
+                        .chain(std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(rect.x + rect.w + snap_margin, dim_range),
+                        )))
+                    })
+                    .collect();
+            }
+            HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
+                // Gather a list of all right borders.
+                snap_candidates_x = x_iter
+                    .map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(rect.x + rect.w + snap_margin, dim_range),
+                        )
+                    })
+                    .collect();
+            }
+            HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
+                // Gather a list of all left borders.
+                snap_candidates_x = x_iter
+                    .map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(rect.x - snap_margin, dim_range),
+                        )
+                    })
+                    .collect();
+            }
+        }
+        let snap_candidates_y;
+        match dragging_hit_test {
+            HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
+                // Nothing to snap in the y direction.
+                snap_candidates_y = Vec::new();
+            }
+            HitTest::TitleBarOrDragArea => {
+                // Gather a list of all top and bottom borders.
+                snap_candidates_y = y_iter
+                    .flat_map(|(win_id, rect, dim_range)| {
+                        std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.y - snap_margin - win_display_h,
+                                dim_range,
+                            ),
+                        ))
+                        .chain(std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(rect.y + rect.h + snap_margin, dim_range),
+                        )))
+                    })
+                    .collect();
+            }
+            HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
+                // Gather a list of all bottom borders.
+                snap_candidates_y = y_iter
+                    .map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(rect.y + rect.h + snap_margin, dim_range),
+                        )
+                    })
+                    .collect();
+            }
+            HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
+                // Gather a list of all top borders.
+                snap_candidates_y = y_iter
+                    .map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(rect.y - snap_margin, dim_range),
+                        )
+                    })
+                    .collect();
+            }
+        }
         self.maybe_dragging_window = Some(DraggingState {
             win_id,
             dragging_hit_test,
             starting_rect,
+            snap_candidates_x,
+            last_snapped_x: None,
+            snap_candidates_y,
+            last_snapped_y: None,
         });
         true
     }
@@ -495,9 +658,17 @@ impl WindowingState {
             win_id,
             dragging_hit_test,
             starting_rect,
+            ..
         } = match self.maybe_dragging_window.as_ref() {
             Some(x) => x,
             None => return false,
+        };
+        let prev_rect = match self.win_display_rect_int(win_id) {
+            Some(x) => x,
+            None => {
+                self.maybe_dragging_window = None;
+                return false;
+            }
         };
         let hidpi_factor = self.hidpi_factor as f32;
         // Round the offset to device pixels:
@@ -513,11 +684,8 @@ impl WindowingState {
         let area_w = (self.area_size[0] * hidpi_factor) as i32;
         let area_h = (self.area_size[1] * hidpi_factor) as i32;
         let (win_display_w, win_display_h) = {
-            match self.win_display_rect(win_id) {
-                Some(r) => (
-                    (r.w * hidpi_factor).round() as i32,
-                    (r.h * hidpi_factor).round() as i32,
-                ),
+            match self.win_display_rect_int(win_id) {
+                Some(r) => (r.w, r.h),
                 None => return false,
             }
         };
@@ -555,7 +723,52 @@ impl WindowingState {
             })
         };
 
+        let dragging_state = self
+            .maybe_dragging_window
+            .as_mut()
+            .unwrap_or_else(|| unreachable!());
+
+        fn snap_dimension(
+            try_snap: impl Fn(i32) -> Option<i32>,
+            dim_range: snapping::DimRange,
+            snap_candidates: &[(WinId, snapping::SnapSegment)],
+            last_snapped: &mut Option<u32>,
+        ) -> Option<i32> {
+            ({
+                last_snapped.and_then(|last_snapped_idx| {
+                    // Check the previously snapped window border.
+                    let (_, seg) = snap_candidates[last_snapped_idx as usize];
+                    if seg.dim_range().overlaps_with(dim_range) {
+                        try_snap(seg.perpendicular_dim())
+                    } else {
+                        None
+                    }
+                })
+            })
+            .or_else(|| {
+                // Try to find a window border to snap to.
+                // TODO: Possible optimization if the candidates are sorted.
+                let maybe_snap = snap_candidates
+                    .iter()
+                    .enumerate()
+                    .find_map(|(i, (_, seg))| {
+                        if seg.dim_range().overlaps_with(dim_range) {
+                            try_snap(seg.perpendicular_dim()).map(|snap| (i, snap))
+                        } else {
+                            None
+                        }
+                    });
+                if let Some((i, snap)) = maybe_snap {
+                    *last_snapped = Some(i as u32);
+                    Some(snap)
+                } else {
+                    *last_snapped = None;
+                    None
+                }
+            })
+        };
         // Calculate horizontal dimensions:
+        let y_dim_range = snapping::DimRange::new(prev_rect.y, prev_rect.y + prev_rect.h);
         let (new_x, new_w);
         match dragging_hit_test {
             HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
@@ -563,39 +776,97 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = snap_move(starting_rect.x + dx, 0 + snap_margin)
-                    .or_else(|| {
-                        snap_move(starting_rect.x + dx, area_w - snap_margin - win_display_w)
-                    })
-                    .unwrap_or(starting_rect.x + dx);
+                let target_x = starting_rect.x + dx;
+                let try_snap = |x_to_snap: i32| snap_move(target_x, x_to_snap);
+
+                new_x = {
+                    // Try snapping to the left and right edges of area.
+                    let maybe_snap = try_snap(0 + snap_margin)
+                        .or_else(|| try_snap(area_w - snap_margin - win_display_w));
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_x = None;
+                    }
+                    maybe_snap
+                }
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        y_dim_range,
+                        &dragging_state.snap_candidates_x,
+                        &mut dragging_state.last_snapped_x,
+                    )
+                })
+                .unwrap_or_else(|| {
+                    // Nothing to snap
+                    target_x
+                });
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
-                new_x = snap_resize_lower(
-                    starting_rect.x + dx,
-                    starting_rect.x + starting_rect.w,
-                    0 + snap_margin,
-                    min_w,
-                )
+                let target_x = starting_rect.x + dx;
+                let try_snap = |x_to_snap: i32| {
+                    snap_resize_lower(
+                        target_x,
+                        starting_rect.x + starting_rect.w,
+                        x_to_snap,
+                        min_w,
+                    )
+                };
+
+                new_x = ({
+                    // Try snapping to left edge of area.
+                    let maybe_snap = try_snap(0 + snap_margin);
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_x = None;
+                    }
+                    maybe_snap
+                })
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        y_dim_range,
+                        &dragging_state.snap_candidates_x,
+                        &mut dragging_state.last_snapped_x,
+                    )
+                })
                 .unwrap_or_else(|| {
+                    // Nothing to snap.
                     starting_rect.x + starting_rect.w - (starting_rect.w - dx).max(min_w)
                 });
                 new_w = starting_rect.w + starting_rect.x - new_x;
             }
             HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
+                let target_x = starting_rect.x + starting_rect.w + dx;
+                let try_snap =
+                    |x_to_snap: i32| snap_resize_upper(starting_rect.x, target_x, x_to_snap, min_w);
+
                 new_x = starting_rect.x;
-                new_w = snap_resize_upper(
-                    starting_rect.x,
-                    starting_rect.x + starting_rect.w + dx,
-                    area_w - snap_margin,
-                    min_w,
-                )
+                new_w = ({
+                    // Try snapping to right edge of area.
+                    let maybe_snap = try_snap(area_w - snap_margin);
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_x = None;
+                    }
+                    maybe_snap
+                })
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        y_dim_range,
+                        &dragging_state.snap_candidates_x,
+                        &mut dragging_state.last_snapped_x,
+                    )
+                })
                 .map(|x| x - starting_rect.x)
-                .unwrap_or_else(|| (starting_rect.w + dx).max(min_w));
+                .unwrap_or_else(|| {
+                    // Nothing to snap.
+                    (starting_rect.w + dx).max(min_w)
+                });
             }
         }
 
         // Calculate vertical dimensions:
+        let x_dim_range = snapping::DimRange::new(prev_rect.x, prev_rect.x + prev_rect.h);
         let (new_y, new_h);
         match dragging_hit_test {
             HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
@@ -603,35 +874,92 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = snap_move(starting_rect.y + dy, 0 + snap_margin)
-                    .or_else(|| {
-                        snap_move(starting_rect.y + dy, area_h - snap_margin - win_display_h)
-                    })
-                    .unwrap_or(starting_rect.y + dy);
+                let target_y = starting_rect.y + dy;
+                let try_snap = |y_to_snap: i32| snap_move(target_y, y_to_snap);
+
+                new_y = {
+                    // Try snapping to the top and bottom edges of area.
+                    let maybe_snap = try_snap(0 + snap_margin)
+                        .or_else(|| try_snap(area_h - snap_margin - win_display_h));
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_y = None;
+                    }
+                    maybe_snap
+                }
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        x_dim_range,
+                        &dragging_state.snap_candidates_y,
+                        &mut dragging_state.last_snapped_y,
+                    )
+                })
+                .unwrap_or_else(|| {
+                    // Nothing to snap
+                    target_y
+                });
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
-                new_y = snap_resize_lower(
-                    starting_rect.y + dy,
-                    starting_rect.y + starting_rect.h,
-                    0 + snap_margin,
-                    min_h,
-                )
+                let target_y = starting_rect.y + dy;
+                let try_snap = |y_to_snap: i32| {
+                    snap_resize_lower(
+                        target_y,
+                        starting_rect.y + starting_rect.h,
+                        y_to_snap,
+                        min_h,
+                    )
+                };
+
+                new_y = ({
+                    // Try snapping to top edge of area.
+                    let maybe_snap = try_snap(0 + snap_margin);
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_y = None;
+                    }
+                    maybe_snap
+                })
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        x_dim_range,
+                        &dragging_state.snap_candidates_y,
+                        &mut dragging_state.last_snapped_y,
+                    )
+                })
                 .unwrap_or_else(|| {
+                    // Nothing to snap.
                     starting_rect.y + starting_rect.h - (starting_rect.h - dy).max(min_h)
                 });
                 new_h = starting_rect.h + starting_rect.y - new_y;
             }
             HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
+                let target_y = starting_rect.y + starting_rect.h + dy;
+                let try_snap =
+                    |y_to_snap: i32| snap_resize_upper(starting_rect.y, target_y, y_to_snap, min_h);
+
                 new_y = starting_rect.y;
-                new_h = snap_resize_upper(
-                    starting_rect.y,
-                    starting_rect.y + starting_rect.h + dy,
-                    area_h - snap_margin,
-                    min_h,
-                )
+                new_h = ({
+                    // Try snapping to bottom edge of area.
+                    let maybe_snap = try_snap(area_h - snap_margin);
+                    if maybe_snap.is_some() {
+                        dragging_state.last_snapped_y = None;
+                    }
+                    maybe_snap
+                })
+                .or_else(|| {
+                    snap_dimension(
+                        try_snap,
+                        x_dim_range,
+                        &dragging_state.snap_candidates_y,
+                        &mut dragging_state.last_snapped_y,
+                    )
+                })
                 .map(|y| y - starting_rect.y)
-                .unwrap_or_else(|| (starting_rect.h + dy).max(min_h));
+                .unwrap_or_else(|| {
+                    // Nothing to snap.
+                    (starting_rect.h + dy).max(min_h)
+                });
             }
         }
 
