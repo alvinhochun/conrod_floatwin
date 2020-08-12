@@ -6,6 +6,14 @@ pub struct Rect {
     pub h: f32,
 }
 
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct RectInt {
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HitTest {
     Content,
@@ -73,7 +81,7 @@ pub(crate) struct FrameMetrics {
 struct DraggingState {
     win_id: WinId,
     dragging_hit_test: HitTest,
-    starting_rect: Rect,
+    starting_rect: RectInt,
 }
 
 impl FrameMetrics {
@@ -278,6 +286,21 @@ impl WindowingState {
         })
     }
 
+    /// Retrieves the `RectInt` of a window in its normal state. The `RectInt`
+    /// is in unscaled physical pixels.
+    pub fn win_normal_rect_int(&self, win_id: WinId) -> Option<RectInt> {
+        let WinId(win_idx) = win_id;
+        let win = self.window_states[win_idx as usize].as_ref()?;
+        let rect = win.rect;
+        let hidpi_factor = self.hidpi_factor as f32;
+        Some(RectInt {
+            x: (rect.x * hidpi_factor).round() as i32,
+            y: (rect.y * hidpi_factor).round() as i32,
+            w: (rect.w * hidpi_factor).round() as i32,
+            h: (rect.h * hidpi_factor).round() as i32,
+        })
+    }
+
     /// Retrieves the x, y, width and height of a window in its normal state.
     /// The dimensions are adjusted to align to the physical pixel grid. The
     /// calculations use f64 so that the results are precise enough for GUI
@@ -350,6 +373,19 @@ impl WindowingState {
         }
     }
 
+    pub(crate) fn set_win_normal_rect_int(&mut self, win_id: WinId, rect: RectInt) {
+        let WinId(win_idx) = win_id;
+        let hidpi_factor = self.hidpi_factor as f32;
+        if let Some(win) = &mut self.window_states[win_idx as usize] {
+            win.rect = Rect {
+                x: rect.x as f32 / hidpi_factor,
+                y: rect.y as f32 / hidpi_factor,
+                w: rect.w as f32 / hidpi_factor,
+                h: rect.h as f32 / hidpi_factor,
+            };
+        }
+    }
+
     pub fn win_is_collapsed(&self, win_id: WinId) -> bool {
         let WinId(win_idx) = win_id;
         self.window_states[win_idx as usize]
@@ -417,7 +453,7 @@ impl WindowingState {
         }
         // Use the pixel-aligned `Rect` to prevent the right/bottom edge from
         // wobbling during resize due to rounding issues.
-        let starting_rect = match self.win_normal_rect(win_id) {
+        let starting_rect = match self.win_normal_rect_int(win_id) {
             Some(x) => x,
             None => return false,
         };
@@ -439,7 +475,7 @@ impl WindowingState {
             None => return,
         };
         if abort {
-            self.set_win_normal_rect(win_id, starting_rect);
+            self.set_win_normal_rect_int(win_id, starting_rect);
         } else {
             // Round to device pixel.
             if let Some(rect) = self.win_normal_rect(win_id) {
@@ -465,8 +501,8 @@ impl WindowingState {
         };
         let hidpi_factor = self.hidpi_factor as f32;
         // Round the offset to device pixels:
-        let dx = (offset[0] * hidpi_factor).round() / hidpi_factor;
-        let dy = (offset[1] * hidpi_factor).round() / hidpi_factor;
+        let dx = (offset[0] * hidpi_factor).round() as i32;
+        let dy = (offset[1] * hidpi_factor).round() as i32;
 
         // Ensure the window being dragged is topmost.
         self.bring_to_top(win_id);
@@ -474,21 +510,26 @@ impl WindowingState {
         let border_thickness = self.frame_metrics.border_thickness as f32;
         let title_bar_height = self.frame_metrics.title_bar_height as f32;
 
-        let [area_w, area_h] = self.area_size;
+        let area_w = (self.area_size[0] * hidpi_factor) as i32;
+        let area_h = (self.area_size[1] * hidpi_factor) as i32;
         let (win_display_w, win_display_h) = {
             match self.win_display_rect(win_id) {
-                Some(r) => (r.w, r.h),
+                Some(r) => (
+                    (r.w * hidpi_factor).round() as i32,
+                    (r.h * hidpi_factor).round() as i32,
+                ),
                 None => return false,
             }
         };
 
         // TODO: Make these configurable:
-        let min_w = border_thickness * 2.0 + 50.0;
-        let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
-        let snap_threshold = (12.0 * hidpi_factor).round() / hidpi_factor;
-        let snap_margin = (8.0 * hidpi_factor).round() / hidpi_factor;
+        let min_w = ((border_thickness * 2.0 + 50.0) * hidpi_factor).round() as i32;
+        let min_h =
+            ((border_thickness * 2.0 + title_bar_height + 16.0) * hidpi_factor).round() as i32;
+        let snap_threshold = (12.0 * hidpi_factor).round() as i32;
+        let snap_margin = (8.0 * hidpi_factor).round() as i32;
 
-        let snap_move = |pos: f32, dim: f32, lower_edge: f32, upper_edge: f32| {
+        let snap_move = |pos: i32, dim: i32, lower_edge: i32, upper_edge: i32| {
             if (pos - (lower_edge + snap_margin)).abs() < snap_threshold {
                 Some(lower_edge + snap_margin)
             } else if (pos + dim - (upper_edge - snap_margin)).abs() < snap_threshold {
@@ -497,24 +538,24 @@ impl WindowingState {
                 None
             }
         };
-        let snap_resize_upper = |pos: f32, dim: f32, edge: f32, min_dim: f32| {
+        let snap_resize_upper = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
             // Snap the border to edge if within threshold.
-            if (pos + dim - (edge - snap_margin)).abs() < snap_threshold {
-                let target_dim = edge - snap_margin - pos;
-                if target_dim < min_dim {
+            if (upper_pos - (edge - snap_margin)).abs() < snap_threshold {
+                let target_pos = edge - snap_margin;
+                if (target_pos - lower_pos) < min_dim {
                     None
                 } else {
-                    Some(target_dim)
+                    Some(target_pos)
                 }
             } else {
                 None
             }
         };
-        let snap_resize_lower = |pos: f32, other_pos: f32, edge: f32, min_dim: f32| {
+        let snap_resize_lower = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
             // Snap the border to edge if within threshold.
-            if (pos - (edge + snap_margin)).abs() < snap_threshold {
+            if (lower_pos - (edge + snap_margin)).abs() < snap_threshold {
                 let target_pos = edge + snap_margin;
-                if (other_pos - target_pos) < min_dim {
+                if (upper_pos - target_pos) < min_dim {
                     None
                 } else {
                     Some(target_pos)
@@ -532,7 +573,7 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = snap_move(starting_rect.x + dx, win_display_w, 0.0, area_w)
+                new_x = snap_move(starting_rect.x + dx, win_display_w, 0, area_w)
                     .unwrap_or(starting_rect.x + dx);
                 new_w = starting_rect.w;
             }
@@ -540,7 +581,7 @@ impl WindowingState {
                 new_x = snap_resize_lower(
                     starting_rect.x + dx,
                     starting_rect.x + starting_rect.w,
-                    0.0,
+                    0,
                     min_w,
                 )
                 .unwrap_or_else(|| {
@@ -550,8 +591,14 @@ impl WindowingState {
             }
             HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
                 new_x = starting_rect.x;
-                new_w = snap_resize_upper(starting_rect.x, starting_rect.w + dx, area_w, min_w)
-                    .unwrap_or_else(|| (starting_rect.w + dx).max(min_w));
+                new_w = snap_resize_upper(
+                    starting_rect.x,
+                    starting_rect.x + starting_rect.w + dx,
+                    area_w,
+                    min_w,
+                )
+                .map(|x| x - starting_rect.x)
+                .unwrap_or_else(|| (starting_rect.w + dx).max(min_w));
             }
         }
 
@@ -563,7 +610,7 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = snap_move(starting_rect.y + dy, win_display_h, 0.0, area_h)
+                new_y = snap_move(starting_rect.y + dy, win_display_h, 0, area_h)
                     .unwrap_or(starting_rect.y + dy);
                 new_h = starting_rect.h;
             }
@@ -571,7 +618,7 @@ impl WindowingState {
                 new_y = snap_resize_lower(
                     starting_rect.y + dy,
                     starting_rect.y + starting_rect.h,
-                    0.0,
+                    0,
                     min_h,
                 )
                 .unwrap_or_else(|| {
@@ -581,18 +628,24 @@ impl WindowingState {
             }
             HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
                 new_y = starting_rect.y;
-                new_h = snap_resize_upper(starting_rect.y, starting_rect.h + dy, area_h, min_h)
-                    .unwrap_or_else(|| (starting_rect.h + dy).max(min_h));
+                new_h = snap_resize_upper(
+                    starting_rect.y,
+                    starting_rect.y + starting_rect.h + dy,
+                    area_h,
+                    min_h,
+                )
+                .map(|y| y - starting_rect.y)
+                .unwrap_or_else(|| (starting_rect.h + dy).max(min_h));
             }
         }
 
-        let new_rect = Rect {
+        let new_rect = RectInt {
             x: new_x,
             y: new_y,
             w: new_w,
             h: new_h,
         };
-        self.set_win_normal_rect(win_id, new_rect);
+        self.set_win_normal_rect_int(win_id, new_rect);
         true
     }
 }
