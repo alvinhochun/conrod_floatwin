@@ -529,11 +529,9 @@ impl WindowingState {
         let snap_threshold = (12.0 * hidpi_factor).round() as i32;
         let snap_margin = (8.0 * hidpi_factor).round() as i32;
 
-        let snap_move = |pos: i32, dim: i32, lower_edge: i32, upper_edge: i32| {
-            if (pos - lower_edge).abs() < snap_threshold {
-                Some(lower_edge)
-            } else if (pos + dim - upper_edge).abs() < snap_threshold {
-                Some(upper_edge - dim)
+        let snap_move = |pos: i32, edge: i32| {
+            if (pos - edge).abs() < snap_threshold {
+                Some(edge)
             } else {
                 None
             }
@@ -573,13 +571,11 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = snap_move(
-                    starting_rect.x + dx,
-                    win_display_w,
-                    0 + snap_margin,
-                    area_w - snap_margin,
-                )
-                .unwrap_or(starting_rect.x + dx);
+                new_x = snap_move(starting_rect.x + dx, 0 + snap_margin)
+                    .or_else(|| {
+                        snap_move(starting_rect.x + dx, area_w - snap_margin - win_display_w)
+                    })
+                    .unwrap_or(starting_rect.x + dx);
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
@@ -615,13 +611,11 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = snap_move(
-                    starting_rect.y + dy,
-                    win_display_h,
-                    0 + snap_margin,
-                    area_h - snap_margin,
-                )
-                .unwrap_or(starting_rect.y + dy);
+                new_y = snap_move(starting_rect.y + dy, 0 + snap_margin)
+                    .or_else(|| {
+                        snap_move(starting_rect.y + dy, area_h - snap_margin - win_display_h)
+                    })
+                    .unwrap_or(starting_rect.y + dy);
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
