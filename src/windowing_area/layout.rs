@@ -671,14 +671,14 @@ fn window_hit_test(
 
     let window_part_x = if x <= border_thickness {
         WindowPartX::LeftBorder
-    } else if x >= w - border_thickness {
+    } else if x > w - border_thickness {
         WindowPartX::RightBorder
     } else {
         WindowPartX::Content
     };
     let window_part_y = if y <= border_thickness {
         WindowPartY::TopBorder
-    } else if y >= h - border_thickness {
+    } else if y > h - border_thickness {
         WindowPartY::BottomBorder
     } else if y <= border_thickness + title_bar_height {
         WindowPartY::TitleBar
@@ -689,14 +689,14 @@ fn window_hit_test(
     let corner_leeway = border_thickness * 3;
     let (is_near_l, is_near_r) = if x <= corner_leeway {
         (true, false)
-    } else if x >= w - corner_leeway {
+    } else if x > w - corner_leeway {
         (false, true)
     } else {
         (false, false)
     };
     let (is_near_t, is_near_b) = if y <= corner_leeway {
         (true, false)
-    } else if y >= h - corner_leeway {
+    } else if y > h - corner_leeway {
         (false, true)
     } else {
         (false, false)
