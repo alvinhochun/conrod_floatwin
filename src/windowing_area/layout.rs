@@ -530,18 +530,18 @@ impl WindowingState {
         let snap_margin = (8.0 * hidpi_factor).round() as i32;
 
         let snap_move = |pos: i32, dim: i32, lower_edge: i32, upper_edge: i32| {
-            if (pos - (lower_edge + snap_margin)).abs() < snap_threshold {
-                Some(lower_edge + snap_margin)
-            } else if (pos + dim - (upper_edge - snap_margin)).abs() < snap_threshold {
-                Some(upper_edge - snap_margin - dim)
+            if (pos - lower_edge).abs() < snap_threshold {
+                Some(lower_edge)
+            } else if (pos + dim - upper_edge).abs() < snap_threshold {
+                Some(upper_edge - dim)
             } else {
                 None
             }
         };
         let snap_resize_upper = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
             // Snap the border to edge if within threshold.
-            if (upper_pos - (edge - snap_margin)).abs() < snap_threshold {
-                let target_pos = edge - snap_margin;
+            if (upper_pos - edge).abs() < snap_threshold {
+                let target_pos = edge;
                 if (target_pos - lower_pos) < min_dim {
                     None
                 } else {
@@ -553,8 +553,8 @@ impl WindowingState {
         };
         let snap_resize_lower = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
             // Snap the border to edge if within threshold.
-            if (lower_pos - (edge + snap_margin)).abs() < snap_threshold {
-                let target_pos = edge + snap_margin;
+            if (lower_pos - edge).abs() < snap_threshold {
+                let target_pos = edge;
                 if (upper_pos - target_pos) < min_dim {
                     None
                 } else {
@@ -573,15 +573,20 @@ impl WindowingState {
                 new_w = starting_rect.w;
             }
             HitTest::TitleBarOrDragArea => {
-                new_x = snap_move(starting_rect.x + dx, win_display_w, 0, area_w)
-                    .unwrap_or(starting_rect.x + dx);
+                new_x = snap_move(
+                    starting_rect.x + dx,
+                    win_display_w,
+                    0 + snap_margin,
+                    area_w - snap_margin,
+                )
+                .unwrap_or(starting_rect.x + dx);
                 new_w = starting_rect.w;
             }
             HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
                 new_x = snap_resize_lower(
                     starting_rect.x + dx,
                     starting_rect.x + starting_rect.w,
-                    0,
+                    0 + snap_margin,
                     min_w,
                 )
                 .unwrap_or_else(|| {
@@ -594,7 +599,7 @@ impl WindowingState {
                 new_w = snap_resize_upper(
                     starting_rect.x,
                     starting_rect.x + starting_rect.w + dx,
-                    area_w,
+                    area_w - snap_margin,
                     min_w,
                 )
                 .map(|x| x - starting_rect.x)
@@ -610,15 +615,20 @@ impl WindowingState {
                 new_h = starting_rect.h;
             }
             HitTest::TitleBarOrDragArea => {
-                new_y = snap_move(starting_rect.y + dy, win_display_h, 0, area_h)
-                    .unwrap_or(starting_rect.y + dy);
+                new_y = snap_move(
+                    starting_rect.y + dy,
+                    win_display_h,
+                    0 + snap_margin,
+                    area_h - snap_margin,
+                )
+                .unwrap_or(starting_rect.y + dy);
                 new_h = starting_rect.h;
             }
             HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
                 new_y = snap_resize_lower(
                     starting_rect.y + dy,
                     starting_rect.y + starting_rect.h,
-                    0,
+                    0 + snap_margin,
                     min_h,
                 )
                 .unwrap_or_else(|| {
@@ -631,7 +641,7 @@ impl WindowingState {
                 new_h = snap_resize_upper(
                     starting_rect.y,
                     starting_rect.y + starting_rect.h + dy,
-                    area_h,
+                    area_h - snap_margin,
                     min_h,
                 )
                 .map(|y| y - starting_rect.y)
