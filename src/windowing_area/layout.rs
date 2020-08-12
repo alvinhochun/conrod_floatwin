@@ -537,30 +537,22 @@ impl WindowingState {
             }
         };
         let snap_resize_upper = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
-            // Snap the border to edge if within threshold.
-            if (upper_pos - edge).abs() < snap_threshold {
-                let target_pos = edge;
-                if (target_pos - lower_pos) < min_dim {
+            snap_move(upper_pos, edge).and_then(|edge| {
+                if (edge - lower_pos) < min_dim {
                     None
                 } else {
-                    Some(target_pos)
+                    Some(edge)
                 }
-            } else {
-                None
-            }
+            })
         };
         let snap_resize_lower = |lower_pos: i32, upper_pos: i32, edge: i32, min_dim: i32| {
-            // Snap the border to edge if within threshold.
-            if (lower_pos - edge).abs() < snap_threshold {
-                let target_pos = edge;
-                if (upper_pos - target_pos) < min_dim {
+            snap_move(lower_pos, edge).and_then(|edge| {
+                if (upper_pos - edge) < min_dim {
                     None
                 } else {
-                    Some(target_pos)
+                    Some(edge)
                 }
-            } else {
-                None
-            }
+            })
         };
 
         // Calculate horizontal dimensions:
