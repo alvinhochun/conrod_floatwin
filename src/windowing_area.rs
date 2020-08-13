@@ -11,6 +11,7 @@ use conrod_core::{
 
 pub mod layout;
 
+mod debug;
 mod window_frame;
 
 #[derive(WidgetCommon)]
@@ -20,6 +21,7 @@ pub struct WindowingArea<'a> {
     pub style: Style,
     pub windowing_state: &'a mut WindowingState,
     pub hidpi_factor: f64,
+    pub enable_debug: bool,
 }
 
 pub struct State {
@@ -48,6 +50,7 @@ widget_ids! {
         window_frames[],
         // window_titles[],
         window_contents[],
+        debug,
     }
 }
 
@@ -58,7 +61,13 @@ impl<'a> WindowingArea<'a> {
             style: Style::default(),
             windowing_state,
             hidpi_factor,
+            enable_debug: false,
         }
+    }
+
+    pub fn with_debug(mut self, enabled: bool) -> Self {
+        self.enable_debug = enabled;
+        self
     }
 }
 
@@ -90,6 +99,7 @@ impl<'a> Widget for WindowingArea<'a> {
         let Self {
             windowing_state,
             hidpi_factor,
+            enable_debug,
             ..
         } = self;
 
@@ -344,6 +354,18 @@ impl<'a> Widget for WindowingArea<'a> {
             })
         {
             ui.set_mouse_cursor(cursor);
+        }
+
+        if enable_debug {
+            if let Some(win_id) = windowing_state.topmost_win() {
+                debug::DebugWidget::new(&*windowing_state, win_id, hidpi_factor)
+                    .graphics_for(id)
+                    .place_on_kid_area(false)
+                    .xy(rect.xy())
+                    .wh(rect.dim())
+                    .depth(std::f32::MIN)
+                    .set(state.ids.debug, &mut ui);
+            }
         }
         WindowingContext {
             windowing_area_id: id,
