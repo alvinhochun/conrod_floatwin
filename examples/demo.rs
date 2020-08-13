@@ -52,6 +52,8 @@ fn main() {
     };
     let mut array_win_count = 0;
 
+    let mut enable_debug = false;
+
     // Poll events from the window.
     support::run_loop(display, event_loop, move |request, display| {
         match request {
@@ -96,6 +98,15 @@ fn main() {
                                 ),
                             )),
                         },
+                        glium::glutin::event::WindowEvent::KeyboardInput {
+                            input:
+                                glium::glutin::event::KeyboardInput {
+                                    virtual_keycode: Some(glium::glutin::event::VirtualKeyCode::F12),
+                                    state: glium::glutin::event::ElementState::Pressed,
+                                    ..
+                                },
+                            ..
+                        } => enable_debug = !enable_debug,
                         glium::glutin::event::WindowEvent::ScaleFactorChanged {
                             scale_factor,
                             ..
@@ -122,6 +133,7 @@ fn main() {
                     &mut win_ids,
                     &mut array_win_count,
                     current_hidpi_factor,
+                    enable_debug,
                 );
 
                 // Get the underlying winit window and update the mouse cursor as set by conrod.
@@ -167,18 +179,20 @@ fn set_widgets(
     win_ids: &mut WinIds,
     array_win_count: &mut usize,
     hidpi_factor: f64,
+    enable_debug: bool,
 ) {
     if win_ids.test_array.len() < *array_win_count {
-        win_ids.test_array.resize_with(*array_win_count, || {
-            win_state.next_id()
-        });
+        win_ids
+            .test_array
+            .resize_with(*array_win_count, || win_state.next_id());
     }
     widget::Rectangle::fill(ui.window_dim())
         .color(conrod_core::color::BLUE)
         .middle()
         .set(ids.backdrop, ui);
-    let mut win_ctx: WindowingContext =
-        WindowingArea::new(win_state, hidpi_factor).set(ids.windowing_area, ui);
+    let mut win_ctx: WindowingContext = WindowingArea::new(win_state, hidpi_factor)
+        .with_debug(enable_debug)
+        .set(ids.windowing_area, ui);
     if let Some(win) = win_ctx.make_window(
         "Test1",
         Some([100.0, 100.0]),

@@ -1,5 +1,6 @@
 pub use dim::{Rect, RectF, RectI};
 
+mod debug;
 mod dim;
 mod snapping;
 
