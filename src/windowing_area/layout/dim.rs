@@ -124,8 +124,15 @@ impl ContinuousDim for f32 {}
 impl Dim for i32 {}
 impl DiscreteDim for i32 {}
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Direction {
+    Horizontal,
+    Vertical,
+}
+
 pub trait Dir: Clone + Copy + PartialEq + Eq + Debug + Send + Sync {
     type PerpendicularDir: Dir;
+    const DIR: Direction;
     fn dim_from_point<T: Dim>(p: Point<T>) -> T;
     fn dim_from_size<T: Dim>(s: Size<T>) -> T;
 }
@@ -134,6 +141,7 @@ pub trait Dir: Clone + Copy + PartialEq + Eq + Debug + Send + Sync {
 pub enum Horizontal {}
 impl Dir for Horizontal {
     type PerpendicularDir = Vertical;
+    const DIR: Direction = Direction::Horizontal;
 
     fn dim_from_point<T: Dim>(p: Point<T>) -> T {
         p.x
@@ -148,6 +156,7 @@ impl Dir for Horizontal {
 pub enum Vertical {}
 impl Dir for Vertical {
     type PerpendicularDir = Horizontal;
+    const DIR: Direction = Direction::Vertical;
 
     fn dim_from_point<T: Dim>(p: Point<T>) -> T {
         p.y
