@@ -1,20 +1,7 @@
+pub use dim::{Rect, RectF, RectI};
+
+mod dim;
 mod snapping;
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct Rect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct RectInt {
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum HitTest {
@@ -60,7 +47,7 @@ pub struct WindowingState {
 }
 
 struct WindowState {
-    rect: Rect,
+    rect: RectF,
     is_collapsed: bool,
 }
 
@@ -83,7 +70,7 @@ pub(crate) struct FrameMetrics {
 struct DraggingState {
     win_id: WinId,
     dragging_hit_test: HitTest,
-    starting_rect: RectInt,
+    starting_rect: RectI,
     snap_candidates_x: Vec<(WinId, snapping::SnapSegment)>,
     last_snapped_x: Option<u32>,
     snap_candidates_y: Vec<(WinId, snapping::SnapSegment)>,
@@ -218,7 +205,7 @@ impl WindowingState {
                 *next_auto_pos = [pos[0] + 16.0, pos[1] + 16.0];
                 pos
             });
-            let rect = Rect { x, y, w, h };
+            let rect = RectF { x, y, w, h };
             *win = Some(WindowState {
                 rect,
                 is_collapsed: initial_state.is_collapsed,
@@ -279,12 +266,12 @@ impl WindowingState {
     /// adjusted to align to the physical pixel grid. Note that since the
     /// returned `Rect` contains f32 dimensions, it may not suitable for use
     /// with GUI toolkits that use f64 internally due to the limited precision.
-    pub fn win_normal_rect(&self, win_id: WinId) -> Option<Rect> {
+    pub fn win_normal_rect(&self, win_id: WinId) -> Option<RectF> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
         let rect = win.rect;
         let hidpi_factor = self.hidpi_factor as f32;
-        Some(Rect {
+        Some(RectF {
             x: (rect.x * hidpi_factor).round() / hidpi_factor,
             y: (rect.y * hidpi_factor).round() / hidpi_factor,
             w: (rect.w * hidpi_factor).round() / hidpi_factor,
@@ -294,12 +281,12 @@ impl WindowingState {
 
     /// Retrieves the `RectInt` of a window in its normal state. The `RectInt`
     /// is in unscaled physical pixels.
-    pub fn win_normal_rect_int(&self, win_id: WinId) -> Option<RectInt> {
+    pub fn win_normal_rect_int(&self, win_id: WinId) -> Option<RectI> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
         let rect = win.rect;
         let hidpi_factor = self.hidpi_factor as f32;
-        Some(RectInt {
+        Some(RectI {
             x: (rect.x * hidpi_factor).round() as i32,
             y: (rect.y * hidpi_factor).round() as i32,
             w: (rect.w * hidpi_factor).round() as i32,
@@ -328,7 +315,7 @@ impl WindowingState {
     /// align to the physical pixel grid. Note that since the returned `Rect`
     /// contains f32 dimensions, it may not suitable for use with GUI toolkits
     /// that use f64 internally due to the limited precision.
-    pub fn win_display_rect(&self, win_id: WinId) -> Option<Rect> {
+    pub fn win_display_rect(&self, win_id: WinId) -> Option<RectF> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
         if win.is_collapsed {
@@ -337,7 +324,7 @@ impl WindowingState {
             let border_thickness = self.frame_metrics.border_thickness as f32;
             let title_bar_height = self.frame_metrics.title_bar_height as f32;
             let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
-            Some(Rect {
+            Some(RectF {
                 x: (rect.x * hidpi_factor).round() / hidpi_factor,
                 y: (rect.y * hidpi_factor).round() / hidpi_factor,
                 w: collapsed_win_width,
@@ -350,7 +337,7 @@ impl WindowingState {
 
     /// Retrieves the `RectInt` of a window for display. The `RectInt` is in
     /// unscaled physical pixels.
-    pub fn win_display_rect_int(&self, win_id: WinId) -> Option<RectInt> {
+    pub fn win_display_rect_int(&self, win_id: WinId) -> Option<RectI> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
         if win.is_collapsed {
@@ -359,7 +346,7 @@ impl WindowingState {
             let border_thickness = self.frame_metrics.border_thickness as f32;
             let title_bar_height = self.frame_metrics.title_bar_height as f32;
             let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
-            Some(RectInt {
+            Some(RectI {
                 x: (rect.x * hidpi_factor).round() as i32,
                 y: (rect.y * hidpi_factor).round() as i32,
                 w: (collapsed_win_width * hidpi_factor).round() as i32,
@@ -394,18 +381,18 @@ impl WindowingState {
         }
     }
 
-    pub(crate) fn set_win_normal_rect(&mut self, win_id: WinId, rect: Rect) {
+    pub(crate) fn set_win_normal_rect(&mut self, win_id: WinId, rect: RectF) {
         let WinId(win_idx) = win_id;
         if let Some(win) = &mut self.window_states[win_idx as usize] {
             win.rect = rect;
         }
     }
 
-    pub(crate) fn set_win_normal_rect_int(&mut self, win_id: WinId, rect: RectInt) {
+    pub(crate) fn set_win_normal_rect_int(&mut self, win_id: WinId, rect: RectI) {
         let WinId(win_idx) = win_id;
         let hidpi_factor = self.hidpi_factor as f32;
         if let Some(win) = &mut self.window_states[win_idx as usize] {
-            win.rect = Rect {
+            win.rect = RectF {
                 x: rect.x as f32 / hidpi_factor,
                 y: rect.y as f32 / hidpi_factor,
                 w: rect.w as f32 / hidpi_factor,
@@ -958,7 +945,7 @@ impl WindowingState {
             }
         }
 
-        let new_rect = RectInt {
+        let new_rect = RectI {
             x: new_x,
             y: new_y,
             w: new_w,
