@@ -79,6 +79,23 @@ fn main() {
                                 },
                             ..
                         } => *should_exit = true,
+                        // Toggle fullscreen on `F11`.
+                        glium::glutin::event::WindowEvent::KeyboardInput {
+                            input:
+                                glium::glutin::event::KeyboardInput {
+                                    virtual_keycode: Some(glium::glutin::event::VirtualKeyCode::F11),
+                                    state: glium::glutin::event::ElementState::Pressed,
+                                    ..
+                                },
+                            ..
+                        } => match display.gl_window().window().fullscreen() {
+                            Some(_) => display.gl_window().window().set_fullscreen(None),
+                            None => display.gl_window().window().set_fullscreen(Some(
+                                glium::glutin::window::Fullscreen::Borderless(
+                                    display.gl_window().window().current_monitor(),
+                                ),
+                            )),
+                        },
                         glium::glutin::event::WindowEvent::ScaleFactorChanged {
                             scale_factor,
                             ..
