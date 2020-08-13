@@ -172,15 +172,20 @@ impl WindowingState {
     }
 
     pub(crate) fn ensure_all_win_in_area(&mut self) {
+        let border_thickness = self.frame_metrics.border_thickness as f32;
+        let title_bar_height = self.frame_metrics.title_bar_height as f32;
+        let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
+
+        // TODO: Make these configurable:
+        let min_w = border_thickness * 2.0 + 50.0;
+        let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
+
         for &mut WindowState {
             rect: ref mut window_rect,
             is_collapsed,
             ..
         } in self.window_states.iter_mut().filter_map(|x| x.as_mut())
         {
-            let border_thickness = self.frame_metrics.border_thickness as f32;
-            let title_bar_height = self.frame_metrics.title_bar_height as f32;
-            let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
             if window_rect.x <= -border_thickness {
                 window_rect.x = -border_thickness;
             } else {
@@ -194,7 +199,7 @@ impl WindowingState {
                 }
             }
             if !is_collapsed && window_rect.w > self.area_size[0] + border_thickness * 2.0 {
-                window_rect.w = self.area_size[0] + border_thickness * 2.0;
+                window_rect.w = min_w.max(self.area_size[0] + border_thickness * 2.0);
             }
             if window_rect.y <= -border_thickness {
                 window_rect.y = -border_thickness;
@@ -202,7 +207,7 @@ impl WindowingState {
                 window_rect.y = self.area_size[1] - (border_thickness + title_bar_height);
             }
             if !is_collapsed && window_rect.h > self.area_size[1] + border_thickness * 2.0 {
-                window_rect.h = self.area_size[1] + border_thickness * 2.0;
+                window_rect.h = min_h.max(self.area_size[1] + border_thickness * 2.0);
             }
         }
     }
