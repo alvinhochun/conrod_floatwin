@@ -1,31 +1,19 @@
-#[derive(Clone, Copy, Debug)]
-pub struct DimRange {
-    start: i32,
-    end: i32,
-}
+use super::dim::{DimRange, Dir, Horizontal, Vertical};
 
-impl DimRange {
-    pub fn new(a: i32, b: i32) -> Self {
-        if a > b {
-            Self { start: b, end: a }
-        } else {
-            Self { start: a, end: b }
-        }
-    }
-
-    pub fn overlaps_with(self, other: Self) -> bool {
-        self.start < other.end && other.start < self.end
-    }
-}
+pub type DimRangeH = DimRange<i32, Horizontal>;
+pub type DimRangeV = DimRange<i32, Vertical>;
 
 #[derive(Clone, Copy, Debug)]
-pub struct SnapSegment {
+pub struct SnapSegment<D: Dir> {
     perpendicular_dim: i32,
-    dim_range: DimRange,
+    dim_range: DimRange<i32, D>,
 }
 
-impl SnapSegment {
-    pub fn new(perpendicular_dim: i32, dim_range: DimRange) -> Self {
+pub type SnapSegmentH = SnapSegment<Horizontal>;
+pub type SnapSegmentV = SnapSegment<Vertical>;
+
+impl<D: Dir> SnapSegment<D> {
+    pub fn new(perpendicular_dim: i32, dim_range: DimRange<i32, D>) -> Self {
         Self {
             perpendicular_dim,
             dim_range,
@@ -36,7 +24,7 @@ impl SnapSegment {
         self.perpendicular_dim
     }
 
-    pub fn dim_range(self) -> DimRange {
+    pub fn dim_range(self) -> DimRange<i32, D> {
         self.dim_range
     }
 }
