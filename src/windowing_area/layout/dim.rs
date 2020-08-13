@@ -1,4 +1,8 @@
-use std::{fmt::Debug, marker::PhantomData, ops::Add};
+use std::{
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Sub, SubAssign},
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Rect<T: Dim> {
@@ -114,6 +118,42 @@ impl<T: Dim> From<Size<T>> for [T; 2] {
     }
 }
 
+impl<T: Dim + Add<Output = T>> Add<Size<T>> for Point<T> {
+    type Output = Point<T>;
+
+    fn add(self, rhs: Size<T>) -> Self::Output {
+        Point {
+            x: self.x + rhs.w,
+            y: self.y + rhs.h,
+        }
+    }
+}
+
+impl<T: Dim + AddAssign> AddAssign<Size<T>> for Point<T> {
+    fn add_assign(&mut self, rhs: Size<T>) {
+        self.x += rhs.w;
+        self.y += rhs.h;
+    }
+}
+
+impl<T: Dim + Sub<Output = T>> Sub<Size<T>> for Point<T> {
+    type Output = Point<T>;
+
+    fn sub(self, rhs: Size<T>) -> Self::Output {
+        Point {
+            x: self.x - rhs.w,
+            y: self.y - rhs.h,
+        }
+    }
+}
+
+impl<T: Dim + SubAssign> SubAssign<Size<T>> for Point<T> {
+    fn sub_assign(&mut self, rhs: Size<T>) {
+        self.x -= rhs.w;
+        self.y -= rhs.h;
+    }
+}
+
 pub trait Dim: Clone + Copy + PartialEq + Debug + Send + Sync {}
 pub trait ContinuousDim: Dim {}
 pub trait DiscreteDim: Dim + Eq {}
@@ -191,7 +231,58 @@ impl<T: Dim + PartialOrd, D: Dir> DimRange<T, D> {
         }
     }
 
+    pub fn lower(self) -> T {
+        self.lower
+    }
+
+    pub fn upper(self) -> T {
+        self.upper
+    }
+
     pub fn overlaps_with(self, other: Self) -> bool {
         self.lower < other.upper && other.lower < self.upper
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_dim_range_ctor() {
+        let d = DimRange::<i32, Horizontal>::new(1, 2);
+        assert_eq!(d.lower, 1);
+        assert_eq!(d.upper, 2);
+
+        let d = DimRange::<i32, Horizontal>::new(2, 1);
+        assert_eq!(d.lower, 1);
+        assert_eq!(d.upper, 2);
+    }
+
+    #[test]
+    fn test_dim_range_overlaps_with() {
+        let d1 = DimRange::<i32, Horizontal>::new(1, 2);
+        let d2 = DimRange::<i32, Horizontal>::new(1, 2);
+        assert_eq!(d1.overlaps_with(d2), true);
+
+        let d1 = DimRange::<i32, Horizontal>::new(1, 10);
+        let d2 = DimRange::<i32, Horizontal>::new(5, 15);
+        assert_eq!(d1.overlaps_with(d2), true);
+        assert_eq!(d2.overlaps_with(d1), true);
+
+        let d1 = DimRange::<i32, Horizontal>::new(5, 10);
+        let d2 = DimRange::<i32, Horizontal>::new(5, 15);
+        assert_eq!(d1.overlaps_with(d2), true);
+        assert_eq!(d2.overlaps_with(d1), true);
+
+        let d1 = DimRange::<i32, Horizontal>::new(1, 10);
+        let d2 = DimRange::<i32, Horizontal>::new(11, 20);
+        assert_eq!(d1.overlaps_with(d2), false);
+        assert_eq!(d2.overlaps_with(d1), false);
+
+        let d1 = DimRange::<i32, Horizontal>::new(1, 10);
+        let d2 = DimRange::<i32, Horizontal>::new(10, 20);
+        assert_eq!(d1.overlaps_with(d2), false);
+        assert_eq!(d2.overlaps_with(d1), false);
     }
 }
