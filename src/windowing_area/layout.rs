@@ -71,9 +71,9 @@ struct DraggingState {
     win_id: WinId,
     dragging_hit_test: HitTest,
     starting_rect: RectI,
-    snap_candidates_x: Vec<(WinId, snapping::SnapSegment)>,
+    snap_candidates_x: Vec<(WinId, snapping::SnapSegmentV)>,
     last_snapped_x: Option<u32>,
-    snap_candidates_y: Vec<(WinId, snapping::SnapSegment)>,
+    snap_candidates_y: Vec<(WinId, snapping::SnapSegmentH)>,
     last_snapped_y: Option<u32>,
 }
 
@@ -502,11 +502,11 @@ impl WindowingState {
                 Some((win_id, rect))
             });
         let x_iter = base_iter.clone().map(|(win_id, rect)| {
-            let dim_range = snapping::DimRange::new(rect.y, rect.y + rect.h);
+            let dim_range = snapping::DimRangeV::new(rect.y, rect.y + rect.h);
             (win_id, rect, dim_range)
         });
         let y_iter = base_iter.map(|(win_id, rect)| {
-            let dim_range = snapping::DimRange::new(rect.x, rect.x + rect.w);
+            let dim_range = snapping::DimRangeH::new(rect.x, rect.x + rect.w);
             (win_id, rect, dim_range)
         });
         let snap_candidates_x;
@@ -710,10 +710,10 @@ impl WindowingState {
             .as_mut()
             .unwrap_or_else(|| unreachable!());
 
-        fn snap_dimension(
+        fn snap_dimension<D: dim::Dir>(
             try_snap: impl Fn(i32) -> Option<i32>,
-            dim_range: snapping::DimRange,
-            snap_candidates: &[(WinId, snapping::SnapSegment)],
+            dim_range: dim::DimRange<i32, D>,
+            snap_candidates: &[(WinId, snapping::SnapSegment<D>)],
             last_snapped: &mut Option<u32>,
         ) -> Option<i32> {
             ({
@@ -750,7 +750,7 @@ impl WindowingState {
             })
         };
         // Calculate horizontal dimensions:
-        let y_dim_range = snapping::DimRange::new(prev_rect.y, prev_rect.y + prev_rect.h);
+        let y_dim_range = snapping::DimRangeV::new(prev_rect.y, prev_rect.y + prev_rect.h);
         let (new_x, new_w);
         match dragging_hit_test {
             HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
@@ -848,7 +848,7 @@ impl WindowingState {
         }
 
         // Calculate vertical dimensions:
-        let x_dim_range = snapping::DimRange::new(prev_rect.x, prev_rect.x + prev_rect.h);
+        let x_dim_range = snapping::DimRangeH::new(prev_rect.x, prev_rect.x + prev_rect.h);
         let (new_y, new_h);
         match dragging_hit_test {
             HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
