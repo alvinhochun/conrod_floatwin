@@ -666,7 +666,7 @@ impl WindowingState {
         let prev_rect = match self.win_display_rect_int(win_id) {
             Some(x) => x,
             None => {
-                self.maybe_dragging_window = None;
+                self.win_drag_end(true);
                 return false;
             }
         };
@@ -683,12 +683,7 @@ impl WindowingState {
 
         let area_w = (self.area_size[0] * hidpi_factor) as i32;
         let area_h = (self.area_size[1] * hidpi_factor) as i32;
-        let (win_display_w, win_display_h) = {
-            match self.win_display_rect_int(win_id) {
-                Some(r) => (r.w, r.h),
-                None => return false,
-            }
-        };
+        let (win_display_w, win_display_h) = (prev_rect.w, prev_rect.h);
 
         // TODO: Make these configurable:
         let min_w = ((border_thickness * 2.0 + 50.0) * hidpi_factor).round() as i32;
