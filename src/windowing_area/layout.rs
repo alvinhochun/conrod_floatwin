@@ -19,6 +19,14 @@ pub enum HitTest {
     // CloseButton,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WindowDragAction1D {
+    None,
+    MoveWindow,
+    ResizeLower,
+    ResizeUpper,
+}
+
 enum WindowPartX {
     LeftBorder,
     Content,
@@ -75,6 +83,37 @@ struct DraggingState {
     last_snapped_x: Option<u32>,
     snap_candidates_y: Vec<(WinId, snapping::SnapSegmentH)>,
     last_snapped_y: Option<u32>,
+}
+
+impl HitTest {
+    pub fn to_drag_action_1d<D: dim::Dir>(self) -> WindowDragAction1D {
+        match <D as dim::Dir>::DIR {
+            dim::Direction::Horizontal => match self {
+                HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
+                    WindowDragAction1D::None
+                }
+                HitTest::TitleBarOrDragArea => WindowDragAction1D::MoveWindow,
+                HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
+                    WindowDragAction1D::ResizeLower
+                }
+                HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
+                    WindowDragAction1D::ResizeUpper
+                }
+            },
+            dim::Direction::Vertical => match self {
+                HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
+                    WindowDragAction1D::None
+                }
+                HitTest::TitleBarOrDragArea => WindowDragAction1D::MoveWindow,
+                HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
+                    WindowDragAction1D::ResizeLower
+                }
+                HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
+                    WindowDragAction1D::ResizeUpper
+                }
+            },
+        }
+    }
 }
 
 impl FrameMetrics {
@@ -475,12 +514,79 @@ impl WindowingState {
 
         let hidpi_factor = self.hidpi_factor as f32;
         let snap_margin = (8.0 * hidpi_factor).round() as i32;
-        let (win_display_w, win_display_h) = {
+        let win_display_size = {
             match self.win_display_rect_int(win_id) {
-                Some(r) => (r.w, r.h),
+                Some(r) => r.size(),
                 None => return false,
             }
         };
+
+        fn snap_candidates<D: dim::Dir, Iter>(
+            dragging_hit_test: HitTest,
+            win_rect_iter: Iter,
+            snap_margin: i32,
+            win_display_size: dim::SizeI,
+        ) -> Vec<(WinId, snapping::SnapSegment<D::PerpendicularDir>)>
+        where
+            Iter: Iterator<Item = (WinId, RectI)>,
+        {
+            let iter = win_rect_iter.map(|(win_id, rect)| {
+                let dim_range = rect.range::<D::PerpendicularDir>();
+                (win_id, rect, dim_range)
+            });
+            match dragging_hit_test.to_drag_action_1d::<D>() {
+                WindowDragAction1D::None => {
+                    // Nothing to snap in this direction.
+                    Vec::new()
+                }
+                WindowDragAction1D::MoveWindow => {
+                    // Gather a list of all lower and upper borders.
+                    iter.flat_map(|(win_id, rect, dim_range)| {
+                        std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.pos().dim::<D>() - snap_margin - win_display_size.dim::<D>(),
+                                dim_range,
+                            ),
+                        ))
+                        .chain(std::iter::once((
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.pos().dim::<D>() + rect.size().dim::<D>() + snap_margin,
+                                dim_range,
+                            ),
+                        )))
+                    })
+                    .collect()
+                }
+                WindowDragAction1D::ResizeLower => {
+                    // Gather a list of all upper borders.
+                    iter.map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.pos().dim::<D>() + rect.size().dim::<D>() + snap_margin,
+                                dim_range,
+                            ),
+                        )
+                    })
+                    .collect()
+                }
+                WindowDragAction1D::ResizeUpper => {
+                    // Gather a list of all lower borders.
+                    iter.map(|(win_id, rect, dim_range)| {
+                        (
+                            win_id,
+                            snapping::SnapSegment::new(
+                                rect.pos().dim::<D>() - snap_margin,
+                                dim_range,
+                            ),
+                        )
+                    })
+                    .collect()
+                }
+            }
+        }
 
         // Gather a list of borders of other windows that could
         // possibly be snapped to.
@@ -501,108 +607,18 @@ impl WindowingState {
                 let rect = self.win_display_rect_int(win_id)?;
                 Some((win_id, rect))
             });
-        let x_iter = base_iter.clone().map(|(win_id, rect)| {
-            let dim_range = snapping::DimRangeV::new(rect.y, rect.y + rect.h);
-            (win_id, rect, dim_range)
-        });
-        let y_iter = base_iter.map(|(win_id, rect)| {
-            let dim_range = snapping::DimRangeH::new(rect.x, rect.x + rect.w);
-            (win_id, rect, dim_range)
-        });
-        let snap_candidates_x;
-        match dragging_hit_test {
-            HitTest::Content | HitTest::TopBorder | HitTest::BottomBorder => {
-                // Nothing to snap in the x direction.
-                snap_candidates_x = Vec::new();
-            }
-            HitTest::TitleBarOrDragArea => {
-                // Gather a list of all left and right borders.
-                snap_candidates_x = x_iter
-                    .flat_map(|(win_id, rect, dim_range)| {
-                        std::iter::once((
-                            win_id,
-                            snapping::SnapSegment::new(
-                                rect.x - snap_margin - win_display_w,
-                                dim_range,
-                            ),
-                        ))
-                        .chain(std::iter::once((
-                            win_id,
-                            snapping::SnapSegment::new(rect.x + rect.w + snap_margin, dim_range),
-                        )))
-                    })
-                    .collect();
-            }
-            HitTest::LeftBorder | HitTest::TopLeftCorner | HitTest::BottomLeftCorner => {
-                // Gather a list of all right borders.
-                snap_candidates_x = x_iter
-                    .map(|(win_id, rect, dim_range)| {
-                        (
-                            win_id,
-                            snapping::SnapSegment::new(rect.x + rect.w + snap_margin, dim_range),
-                        )
-                    })
-                    .collect();
-            }
-            HitTest::RightBorder | HitTest::TopRightCorner | HitTest::BottomRightCorner => {
-                // Gather a list of all left borders.
-                snap_candidates_x = x_iter
-                    .map(|(win_id, rect, dim_range)| {
-                        (
-                            win_id,
-                            snapping::SnapSegment::new(rect.x - snap_margin, dim_range),
-                        )
-                    })
-                    .collect();
-            }
-        }
-        let snap_candidates_y;
-        match dragging_hit_test {
-            HitTest::Content | HitTest::LeftBorder | HitTest::RightBorder => {
-                // Nothing to snap in the y direction.
-                snap_candidates_y = Vec::new();
-            }
-            HitTest::TitleBarOrDragArea => {
-                // Gather a list of all top and bottom borders.
-                snap_candidates_y = y_iter
-                    .flat_map(|(win_id, rect, dim_range)| {
-                        std::iter::once((
-                            win_id,
-                            snapping::SnapSegment::new(
-                                rect.y - snap_margin - win_display_h,
-                                dim_range,
-                            ),
-                        ))
-                        .chain(std::iter::once((
-                            win_id,
-                            snapping::SnapSegment::new(rect.y + rect.h + snap_margin, dim_range),
-                        )))
-                    })
-                    .collect();
-            }
-            HitTest::TopBorder | HitTest::TopLeftCorner | HitTest::TopRightCorner => {
-                // Gather a list of all bottom borders.
-                snap_candidates_y = y_iter
-                    .map(|(win_id, rect, dim_range)| {
-                        (
-                            win_id,
-                            snapping::SnapSegment::new(rect.y + rect.h + snap_margin, dim_range),
-                        )
-                    })
-                    .collect();
-            }
-            HitTest::BottomBorder | HitTest::BottomLeftCorner | HitTest::BottomRightCorner => {
-                // Gather a list of all top borders.
-                snap_candidates_y = y_iter
-                    .map(|(win_id, rect, dim_range)| {
-                        (
-                            win_id,
-                            snapping::SnapSegment::new(rect.y - snap_margin, dim_range),
-                        )
-                    })
-                    .collect();
-            }
-        }
+        let snap_candidates_x = snap_candidates::<dim::Horizontal, _>(
+            dragging_hit_test,
+            base_iter.clone(),
+            snap_margin,
+            win_display_size,
+        );
+        let snap_candidates_y = snap_candidates::<dim::Vertical, _>(
+            dragging_hit_test,
+            base_iter,
+            snap_margin,
+            win_display_size,
+        );
         self.maybe_dragging_window = Some(DraggingState {
             win_id,
             dragging_hit_test,
