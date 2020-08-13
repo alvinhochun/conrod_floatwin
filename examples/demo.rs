@@ -79,6 +79,21 @@ fn main() {
                     glium::glutin::WindowEvent::HiDpiFactorChanged(hidpi_factor) => {
                         current_hidpi_factor = hidpi_factor;
                     }
+                    // Toggle fullscreen on `F11`.
+                    glium::glutin::WindowEvent::KeyboardInput {
+                        input:
+                            glium::glutin::KeyboardInput {
+                                virtual_keycode: Some(glium::glutin::VirtualKeyCode::F11),
+                                state: glium::glutin::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => match display.0.gl_window().window().get_fullscreen() {
+                        Some(_) => display.0.gl_window().window().set_fullscreen(None),
+                        None => display.0.gl_window().window().set_fullscreen(Some(
+                            display.0.gl_window().window().get_current_monitor(),
+                        )),
+                    },
                     _ => (),
                 },
                 _ => (),
