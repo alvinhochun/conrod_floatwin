@@ -122,9 +122,9 @@ impl<'a> Widget for WindowingArea<'a> {
         if is_drag_move_window {
             // Add an empty widget on top for mouse capturing.
             EmptyWidget::new()
-                .middle_of(id)
                 .graphics_for(id)
                 .place_on_kid_area(false)
+                .xy(rect.xy())
                 .wh(rect.dim())
                 .depth(position::Depth::MIN)
                 .set(state.ids.capture_overlay, &mut ui);
@@ -391,15 +391,10 @@ impl<'a> WindowingContext<'a> {
         let content_widget_id = state.ids.window_contents[win_idx];
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
         let window_is_collapsed = self.windowing_state.win_is_collapsed(win_id);
-        let conrod_window_rect = {
-            let [x, y, w, h] = self.windowing_state.win_display_rect_f64(win_id)?;
-            let [left, top] = self.windowing_area_rect.top_left();
-            let x1 = left + x;
-            let y1 = top - y;
-            let x2 = left + x + w;
-            let y2 = top - y - h;
-            conrod_core::Rect::from_corners([x1, y1], [x2, y2])
-        };
+        let conrod_window_rect = util::win_rect_to_conrod_rect(
+            self.windowing_state.win_display_rect_f64(win_id)?,
+            self.windowing_area_rect,
+        );
         WindowFrame::new(self.frame_metrics)
             .title(title)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
