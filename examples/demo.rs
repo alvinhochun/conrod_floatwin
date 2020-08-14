@@ -186,6 +186,7 @@ fn set_widgets(
         .set(ids.windowing_area, ui);
     let builder = WindowBuilder::new()
         .title("Test1")
+        .is_collapsible(false)
         .initial_position([100.0, 100.0])
         .initial_size([150.0, 100.0]);
     if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test1, ui) {

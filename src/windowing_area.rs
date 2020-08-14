@@ -44,6 +44,7 @@ pub struct WindowBuilder<'a> {
     pub title: &'a str,
     pub initial_position: Option<[f32; 2]>,
     pub initial_size: Option<[f32; 2]>,
+    pub is_collapsible: bool,
     pub is_collapsed: Option<bool>,
     _private: (),
 }
@@ -394,6 +395,7 @@ impl<'a> WindowBuilder<'a> {
             title: "",
             initial_position: None,
             initial_size: None,
+            is_collapsible: true,
             is_collapsed: None,
             _private: (),
         }
@@ -413,6 +415,13 @@ impl<'a> WindowBuilder<'a> {
     pub fn initial_size(self, initial_size: [f32; 2]) -> Self {
         Self {
             initial_size: Some(initial_size),
+            ..self
+        }
+    }
+
+    pub fn is_collapsible(self, is_collapsible: bool) -> Self {
+        Self {
+            is_collapsible,
             ..self
         }
     }
@@ -445,8 +454,12 @@ impl<'a> WindowingContext<'a> {
                 is_collapsed: false,
             });
         self.windowing_state.set_needed(win_id, true);
-        if let Some(is_collapsed) = builder.is_collapsed {
-            self.windowing_state.set_win_collapsed(win_id, is_collapsed);
+        if builder.is_collapsible {
+            if let Some(is_collapsed) = builder.is_collapsed {
+                self.windowing_state.set_win_collapsed(win_id, is_collapsed);
+            }
+        } else {
+            self.windowing_state.set_win_collapsed(win_id, false);
         }
         let state: &State = match ui
             .widget_graph()
@@ -483,6 +496,7 @@ impl<'a> WindowingContext<'a> {
         let event = WindowFrame::new(self.frame_metrics)
             .title(builder.title)
             .is_focused(is_focused)
+            .is_collapsible(builder.is_collapsible)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
@@ -515,7 +529,8 @@ impl<'a> WindowingContext<'a> {
         // Toggle the collapse state if the collapse button was pressed or the
         // title bar was double-clicked, but only if the caller has not
         // explicitly set the collapse state.
-        if builder.is_collapsed.is_none()
+        if builder.is_collapsible
+            && builder.is_collapsed.is_none()
             && (event.collapse_clicked.0 as u32 + title_bar_double_click_count) % 2 == 1
         {
             self.windowing_state
