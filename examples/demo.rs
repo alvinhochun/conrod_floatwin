@@ -205,7 +205,7 @@ fn set_widgets(
         .title("Test1")
         .initial_position([100.0, 100.0])
         .initial_size([150.0, 100.0]);
-    if let Some(win) = win_ctx.make_window(builder, state.win_ids.test1, ui) {
+    if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_YELLOW)
@@ -222,7 +222,7 @@ fn set_widgets(
         .title("Test2")
         .initial_position([150.0, 150.0])
         .initial_size([200.0, 200.0]);
-    if let Some(win) = win_ctx.make_window(builder, state.win_ids.test2, ui) {
+    if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test2, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_BLUE)
@@ -244,7 +244,7 @@ fn set_widgets(
         let builder = WindowBuilder::new()
             .title(&title)
             .initial_size([100.0, 100.0]);
-        if let Some(win) = win_ctx.make_window(builder, win_id, ui) {
+        if let (_, Some(win)) = win_ctx.make_window(builder, win_id, ui) {
             let c = widget::Canvas::new()
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
