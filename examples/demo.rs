@@ -3,7 +3,7 @@ use conrod_core::{
 };
 use conrod_floatwin::windowing_area::{
     layout::{WinId, WindowingState},
-    WindowingArea, WindowingContext,
+    WindowBuilder, WindowingArea, WindowingContext,
 };
 use glium::Surface;
 
@@ -184,13 +184,11 @@ fn set_widgets(
     let mut win_ctx: WindowingContext = WindowingArea::new(&mut state.win_state, hidpi_factor)
         .with_debug(state.enable_debug)
         .set(ids.windowing_area, ui);
-    if let Some(win) = win_ctx.make_window(
-        "Test1",
-        Some([100.0, 100.0]),
-        [150.0, 100.0],
-        state.win_ids.test1,
-        ui,
-    ) {
+    let builder = WindowBuilder::new()
+        .title("Test1")
+        .initial_position([100.0, 100.0])
+        .initial_size([150.0, 100.0]);
+    if let Some(win) = win_ctx.make_window(builder, state.win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_YELLOW)
@@ -203,13 +201,11 @@ fn set_widgets(
             .set(ids.text, ui);
     }
     let mut add_win = 0;
-    if let Some(win) = win_ctx.make_window(
-        "Test2",
-        Some([150.0, 150.0]),
-        [200.0, 200.0],
-        state.win_ids.test2,
-        ui,
-    ) {
+    let builder = WindowBuilder::new()
+        .title("Test2")
+        .initial_position([150.0, 150.0])
+        .initial_size([200.0, 200.0]);
+    if let Some(win) = win_ctx.make_window(builder, state.win_ids.test2, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_BLUE)
@@ -228,7 +224,10 @@ fn set_widgets(
     }
     for (i, &win_id) in state.win_ids.test_array.iter().enumerate() {
         let title = format!("Test multi - {}", i);
-        if let Some(win) = win_ctx.make_window(&title, None, [100.0, 100.0], win_id, ui) {
+        let builder = WindowBuilder::new()
+            .title(&title)
+            .initial_size([100.0, 100.0]);
+        if let Some(win) = win_ctx.make_window(builder, win_id, ui) {
             let c = widget::Canvas::new()
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
