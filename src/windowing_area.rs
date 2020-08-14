@@ -87,6 +87,14 @@ impl<'a> Widget for WindowingArea<'a> {
         self.style.clone()
     }
 
+    fn is_over(&self) -> widget::IsOverFn {
+        // We want this widget to not capture mouse events. This does not
+        // affect individual window frames as they still capture mouse events
+        // on their own. Alt+Drag window movement is handled by an overlay
+        // widget that captures mouse events so it is also not affected.
+        |_, _, _| widget::IsOver::Bool(false)
+    }
+
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
         let widget::UpdateArgs {
             id,
