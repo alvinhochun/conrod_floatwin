@@ -356,6 +356,8 @@ impl<'a> Widget for WindowingArea<'a> {
             ui.set_mouse_cursor(cursor);
         }
 
+        windowing_state.set_all_needed(false);
+
         if enable_debug {
             if let Some(win_id) = windowing_state.topmost_win() {
                 debug::DebugWidget::new(&*windowing_state, win_id, hidpi_factor)
@@ -399,6 +401,7 @@ impl<'a> WindowingContext<'a> {
                 position: initial_position,
                 is_collapsed: false,
             });
+        self.windowing_state.set_needed(win_id, true);
         let state: &State = match ui
             .widget_graph()
             .widget(self.windowing_area_id)
@@ -433,6 +436,12 @@ impl<'a> WindowingContext<'a> {
             window_frame_id,
             content_widget_id,
         })
+    }
+}
+
+impl<'a> Drop for WindowingContext<'a> {
+    fn drop(&mut self) {
+        self.windowing_state.sweep_unneeded();
     }
 }
 

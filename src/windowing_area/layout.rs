@@ -58,6 +58,10 @@ pub struct WindowingState {
 struct WindowState {
     rect: RectF,
     is_collapsed: bool,
+    /// This flag is used to keep track of whether the window is still being
+    /// used. The method `sweep_unneeded` will remove all windows with this
+    /// flag set to `false`.
+    is_needed: bool,
 }
 
 pub struct WindowInitialState {
@@ -254,6 +258,7 @@ impl WindowingState {
             *win = Some(WindowState {
                 rect,
                 is_collapsed: initial_state.is_collapsed,
+                is_needed: true,
             });
         }
     }
@@ -264,6 +269,27 @@ impl WindowingState {
 
     pub fn win_count(&self) -> usize {
         self.window_states.len()
+    }
+
+    pub(crate) fn set_needed(&mut self, win_id: WinId, is_needed: bool) {
+        let WinId(win_idx) = win_id;
+        if let Some(win) = &mut self.window_states[win_idx as usize] {
+            win.is_needed = is_needed;
+        }
+    }
+
+    pub(crate) fn set_all_needed(&mut self, is_needed: bool) {
+        for win in self.window_states.iter_mut().filter_map(|x| x.as_mut()) {
+            win.is_needed = is_needed;
+        }
+    }
+
+    pub(crate) fn sweep_unneeded(&mut self) {
+        for win in &mut self.window_states {
+            if win.as_ref().map_or(false, |x| !x.is_needed) {
+                *win = None;
+            }
+        }
     }
 
     pub fn win_hit_test(&self, pos: [f32; 2]) -> Option<(WinId, HitTest)> {
