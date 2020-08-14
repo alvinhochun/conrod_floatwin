@@ -49,14 +49,15 @@ fn main() {
     let win_ids = WinIds {
         test1: win_state.next_id(),
         test2: win_state.next_id(),
-        test_array: Vec::new(),
     };
 
     let mut ui_state = UiState {
         enable_debug: false,
         win_state,
         win_ids,
-        array_win_count: 0,
+        array_wins: vec![],
+        reusable_win_ids: vec![],
+        next_array_win_idx: 1,
     };
 
     // Poll events from the window.
@@ -153,15 +154,20 @@ widget_ids! {
 struct WinIds {
     test1: WinId,
     test2: WinId,
-    test_array: Vec<WinId>,
 }
 
 struct UiState {
     enable_debug: bool,
     win_state: WindowingState,
     win_ids: WinIds,
-    // show_test1: bool,
-    array_win_count: usize,
+    array_wins: Vec<ArrayWinState>,
+    reusable_win_ids: Vec<WinId>,
+    next_array_win_idx: usize,
+}
+
+struct ArrayWinState {
+    index: usize,
+    win_id: WinId,
 }
 
 fn set_widgets(
@@ -170,13 +176,6 @@ fn set_widgets(
     hidpi_factor: f64,
     state: &mut UiState,
 ) {
-    if state.win_ids.test_array.len() < state.array_win_count {
-        let win_state = &mut state.win_state;
-        state
-            .win_ids
-            .test_array
-            .resize_with(state.array_win_count, || win_state.next_id());
-    }
     widget::Rectangle::fill(ui.window_dim())
         .color(conrod_core::color::BLUE)
         .middle()
@@ -223,19 +222,56 @@ fn set_widgets(
             add_win += 1;
         }
     }
-    for (i, &win_id) in state.win_ids.test_array.iter().enumerate() {
-        let title = format!("Test multi - {}", i);
+    let mut array_win_to_close = vec![];
+    for (i, array_win_state) in state.array_wins.iter().enumerate() {
+        let title = format!("Test multi - {}", array_win_state.index);
         let builder = WindowBuilder::new()
             .title(&title)
             .is_closable(true)
-            .initial_size([100.0, 100.0]);
-        if let (_, Some(win)) = win_ctx.make_window(builder, win_id, ui) {
+            .initial_size([150.0, 100.0]);
+        let (event, win) = win_ctx.make_window(builder, array_win_state.win_id, ui);
+        if let Some(win) = win {
             let c = widget::Canvas::new()
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
                 .scroll_kids();
             let (_container_id, _) = win.set(c, ui);
         }
+        if event.close_clicked.was_clicked() {
+            array_win_to_close.push(i);
+        }
     }
-    state.array_win_count += add_win;
+
+    // Since `WindowingContext` borrows our `WindowingState`, we can't use it
+    // to get `WinId`s unless it has been dropped. Other than calling
+    // `std::mem::drop`, one can also wrap the above code in a scope using
+    // curly braces `{` and `}` so that the `WindowingContext` gets dropped
+    // at the end of the scope. Putting it in a function also works.
+    std::mem::drop(win_ctx);
+
+    // Create new windows, getting new `WinId`s if necessary.
+    while add_win > 0 {
+        let win_state = &mut state.win_state;
+        // Reuse an existing `WinId` if available or get a new `WinId`.
+        let win_id = state
+            .reusable_win_ids
+            .pop()
+            .unwrap_or_else(|| win_state.next_id());
+        state.array_wins.push(ArrayWinState {
+            index: state.next_array_win_idx,
+            win_id,
+        });
+        state.next_array_win_idx += 1;
+        add_win -= 1;
+    }
+
+    // Remove the windows to be closed. Note that we do this *after* creating
+    // new windows, because the windows are only destroyed after the next
+    // iteration and we don't want new windows to re-use the leftover states of
+    // these windows which are yet to be destroyed.
+    for i in array_win_to_close.into_iter().rev() {
+        let s = state.array_wins.swap_remove(i);
+        // We want to be able to reuse the `WinId`.
+        state.reusable_win_ids.push(s.win_id);
+    }
 }
