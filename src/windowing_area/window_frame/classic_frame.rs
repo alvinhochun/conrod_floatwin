@@ -178,3 +178,22 @@ pub(super) fn make_frame(
 
     iter_chain![lower_a, upper_a, lower_b, upper_b, inside].map(widget::triangles::Triangle)
 }
+
+pub(super) fn make_title_bar_gradient(
+    bottom_left: [f64; 2],
+    top_right: [f64; 2],
+    color_left: color::Color,
+    color_right: color::Color,
+) -> impl Iterator<Item = widget::triangles::Triangle<widget::triangles::ColoredPoint>> {
+    let [x_o, y_o] = bottom_left;
+    let [x_e, y_e] = top_right;
+    let color_left = color_left.to_rgb();
+    let color_right = color_right.to_rgb();
+    polygon_to_triangle_points(value_iter_chain![
+        ([x_o, y_o], color_left),
+        ([x_o, y_e], color_left),
+        ([x_e, y_e], color_right),
+        ([x_e, y_o], color_right),
+    ])
+    .map(widget::triangles::Triangle)
+}
