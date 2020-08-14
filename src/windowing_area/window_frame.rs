@@ -71,12 +71,18 @@ pub struct Style {
     pub title_bar_justify: Option<text::Justify>,
 }
 
+#[derive(Clone, Debug)]
+pub struct Event {
+    pub collapse_clicked: widget::button::TimesClicked,
+}
+
 widget_ids! {
     struct Ids {
         frame,
         title_bar_box,
         title_text_clip,
         title_text,
+        button_collapse,
     }
 }
 
@@ -110,7 +116,7 @@ impl<'a> WindowFrame<'a> {
 impl<'a> Widget for WindowFrame<'a> {
     type State = State;
     type Style = Style;
-    type Event = ();
+    type Event = Event;
 
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
@@ -193,11 +199,29 @@ impl<'a> Widget for WindowFrame<'a> {
             .place_on_kid_area(false)
             .set(state.ids.title_bar_box, &mut ui);
 
-        // Set the clipping box for the title bar:
+        // Collapse (minimize) button:
+        let button_width = frame_metrics.title_bar_height - 2.0;
+        let button_height = frame_metrics.title_bar_height - 2.0;
+        let collapse_clicked = widget::Button::new()
+            .label("-")
+            .small_font(ui)
+            .label_y(position::Relative::Align(position::Align::Middle))
+            .label_color(color::BLACK)
+            .color(color::GRAY)
+            .mid_left_with_margin_on(state.ids.title_bar_box, 2.0)
+            .w_h(button_width, button_height)
+            .parent(id)
+            .place_on_kid_area(false)
+            .set(state.ids.button_collapse, &mut ui);
+
+        // Set the clipping box for the title bar text:
         EmptyWidget::new()
-            .align_middle_x_of(state.ids.title_bar_box)
+            .x_position_relative_to(
+                state.ids.title_bar_box,
+                position::Relative::Place(position::Place::Start(Some(6.0 + button_width))),
+            )
             .align_middle_y_of(state.ids.title_bar_box)
-            .padded_w_of(state.ids.title_bar_box, 6.0)
+            .padded_w_of(state.ids.title_bar_box, (6.0 * 2.0 + button_width) / 2.0)
             .padded_h_of(state.ids.title_bar_box, 2.0)
             .graphics_for(state.ids.title_bar_box)
             .place_on_kid_area(false)
@@ -216,5 +240,7 @@ impl<'a> Widget for WindowFrame<'a> {
             .graphics_for(state.ids.title_text_clip)
             .place_on_kid_area(false)
             .set(state.ids.title_text, &mut ui);
+
+        Event { collapse_clicked }
     }
 }

@@ -288,26 +288,6 @@ impl<'a> Widget for WindowingArea<'a> {
                             });
                         }
                     }
-                    conrod_core::event::Ui::DoubleClick(
-                        Some(dblclick),
-                        conrod_core::event::DoubleClick {
-                            button: conrod_core::input::MouseButton::Left,
-                            xy,
-                            ..
-                        },
-                    ) => {
-                        if let Some(topmost_win_id) = windowing_state
-                            .topmost_win()
-                            .filter(|win| state.ids.window_frames[win.0 as usize] == *dblclick)
-                        {
-                            let pos = util::conrod_point_to_layout_pos(*xy, rect);
-                            let ht = windowing_state.specific_win_hit_test(topmost_win_id, pos);
-                            if ht == Some(layout::HitTest::TitleBarOrDragArea) {
-                                let is_collapsed = windowing_state.win_is_collapsed(topmost_win_id);
-                                windowing_state.set_win_collapsed(topmost_win_id, !is_collapsed);
-                            }
-                        }
-                    }
                     _ => {}
                 }
             }
@@ -464,7 +444,7 @@ impl<'a> WindowingContext<'a> {
             self.windowing_area_rect,
         );
         let is_focused = self.windowing_state.topmost_win() == Some(win_id);
-        WindowFrame::new(self.frame_metrics)
+        let event = WindowFrame::new(self.frame_metrics)
             .title(builder.title)
             .is_focused(is_focused)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
@@ -474,6 +454,38 @@ impl<'a> WindowingContext<'a> {
             .depth(window_depth)
             .parent(self.windowing_area_id)
             .set(window_frame_id, ui);
+
+        let title_bar_double_click_count = ui
+            .global_input()
+            .events()
+            .ui()
+            .map(|event| match event {
+                conrod_core::event::Ui::DoubleClick(
+                    Some(dblclick),
+                    conrod_core::event::DoubleClick {
+                        button: conrod_core::input::MouseButton::Left,
+                        xy,
+                        ..
+                    },
+                ) if *dblclick == window_frame_id => {
+                    let pos = util::conrod_point_to_layout_pos(*xy, self.windowing_area_rect);
+                    let ht = self.windowing_state.specific_win_hit_test(win_id, pos);
+                    ht == Some(layout::HitTest::TitleBarOrDragArea)
+                }
+                _ => false,
+            })
+            .filter(|&x| x)
+            .count() as u32;
+        if (event.collapse_clicked.0 as u32 + title_bar_double_click_count) % 2 == 1 {
+            self.windowing_state
+                .set_win_collapsed(win_id, !window_is_collapsed);
+            // Since we are toggling the collapse state after the WindowFrame
+            // has already been set to the UI, the new collapse state will only
+            // be reflected on the next update. We explicitly ask the UI to
+            // redraw to make sure the next update will happen in case nothing
+            // else has changed in the rest of the UI during this update.
+            ui.needs_redraw();
+        }
         if window_is_collapsed {
             return None;
         }
