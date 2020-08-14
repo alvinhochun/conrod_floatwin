@@ -1,8 +1,9 @@
 use super::layout;
 use layout::FrameMetrics;
 
+use crate::empty_widget::EmptyWidget;
 use conrod_core::{
-    builder_methods,
+    builder_methods, color,
     position::{self},
     text, widget, widget_ids, Borderable, Color, Colorable, FontSize, Labelable, Positionable,
     Sizeable, Widget, WidgetCommon, WidgetStyle,
@@ -17,6 +18,7 @@ pub struct WindowFrame<'a> {
     pub common: widget::CommonBuilder,
     pub style: Style,
     pub title: &'a str,
+    pub is_focused: bool,
     pub(crate) frame_metrics: FrameMetrics,
 }
 
@@ -72,7 +74,9 @@ pub struct Style {
 widget_ids! {
     struct Ids {
         frame,
-        title_bar,
+        title_bar_box,
+        title_text_clip,
+        title_text,
     }
 }
 
@@ -83,11 +87,13 @@ impl<'a> WindowFrame<'a> {
             style: Style::default(),
             title: "",
             frame_metrics,
+            is_focused: true,
         }
     }
 
     builder_methods! {
         pub title { title = &'a str }
+        pub is_focused { is_focused = bool }
     }
 
     pub fn frame_color(mut self, color: Color) -> Self {
@@ -139,6 +145,7 @@ impl<'a> Widget for WindowFrame<'a> {
         let Self {
             style,
             title,
+            is_focused,
             frame_metrics,
             ..
         } = self;
@@ -159,32 +166,55 @@ impl<'a> Widget for WindowFrame<'a> {
             .place_on_kid_area(false)
             .set(state.ids.frame, &mut ui);
 
-        // TitleBar widget.
-        {
-            let color = style.title_bar_color(&ui.theme);
-            let font_size = style.title_bar_font_size(&ui.theme);
-            let label_color = style.title_bar_text_color(&ui.theme);
-            let justify = style.title_bar_justify(&ui.theme);
-            widget::TitleBar::new(title, state.ids.frame)
-                .and_mut(|title_bar| {
-                    title_bar.style.maybe_wrap = Some(None);
-                    title_bar.style.justify = Some(justify);
-                })
-                .color(color)
-                .border(0.0)
-                .label_font_size(font_size)
-                .label_color(label_color)
-                .y_position_relative_to(
-                    id,
-                    position::Relative::Place(position::Place::End(Some(
-                        frame_metrics.border_thickness,
-                    ))),
-                )
-                .w(rect.w() - frame_metrics.border_thickness * 2.0)
-                .h(frame_metrics.title_bar_height)
-                .graphics_for(id)
-                .place_on_kid_area(false)
-                .set(state.ids.title_bar, &mut ui);
+        let left = rect.pad_left(frame_metrics.border_thickness).left();
+        let right = rect.pad_right(frame_metrics.border_thickness).right();
+        let top = rect.pad_top(frame_metrics.border_thickness).top();
+        let bottom = top - frame_metrics.title_bar_height;
+        let title_bar_rect = conrod_core::Rect::from_corners([left, bottom], [right, top]);
+
+        // Draw a title bar rect:
+        let (color_left, color_right);
+        if is_focused {
+            color_left = color::rgba(0.0, 0.0, 0.5, 1.0);
+            color_right = color::rgba(0.05, 0.5, 0.8, 1.0);
+        } else {
+            color_left = color::rgba(0.5, 0.5, 0.5, 1.0);
+            color_right = color::rgba(0.7, 0.7, 0.7, 1.0);
         }
+        let triangles = classic_frame::make_title_bar_gradient(
+            title_bar_rect.bottom_left(),
+            title_bar_rect.top_right(),
+            color_left,
+            color_right,
+        );
+        widget::Triangles::multi_color(triangles)
+            .with_bounding_rect(title_bar_rect)
+            .graphics_for(id)
+            .place_on_kid_area(false)
+            .set(state.ids.title_bar_box, &mut ui);
+
+        // Set the clipping box for the title bar:
+        EmptyWidget::new()
+            .align_middle_x_of(state.ids.title_bar_box)
+            .align_middle_y_of(state.ids.title_bar_box)
+            .padded_w_of(state.ids.title_bar_box, 6.0)
+            .padded_h_of(state.ids.title_bar_box, 2.0)
+            .graphics_for(state.ids.title_bar_box)
+            .place_on_kid_area(false)
+            .crop_kids()
+            .set(state.ids.title_text_clip, &mut ui);
+
+        // Draw the title bar text:
+        let font_size = style.title_bar_font_size(&ui.theme);
+        widget::Text::new(title)
+            .no_line_wrap()
+            .left_justify()
+            .wh_of(state.ids.title_text_clip)
+            .middle_of(state.ids.title_text_clip)
+            .color(color::WHITE)
+            .font_size(font_size)
+            .graphics_for(state.ids.title_text_clip)
+            .place_on_kid_area(false)
+            .set(state.ids.title_text, &mut ui);
     }
 }

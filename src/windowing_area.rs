@@ -420,8 +420,10 @@ impl<'a> WindowingContext<'a> {
             self.windowing_state.win_display_rect_f64(win_id)?,
             self.windowing_area_rect,
         );
+        let is_focused = self.windowing_state.topmost_win() == Some(win_id);
         WindowFrame::new(self.frame_metrics)
             .title(title)
+            .is_focused(is_focused)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
