@@ -260,6 +260,7 @@ impl WindowingState {
                 is_collapsed: initial_state.is_collapsed,
                 is_needed: true,
             });
+            self.bring_to_top(win_id);
         }
     }
 
