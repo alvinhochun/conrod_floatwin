@@ -44,7 +44,13 @@ pub struct WindowBuilder<'a> {
     pub title: &'a str,
     pub initial_position: Option<[f32; 2]>,
     pub initial_size: Option<[f32; 2]>,
+    pub is_collapsed: Option<bool>,
     _private: (),
+}
+
+pub struct WindowEvent {
+    pub collapse_clicked: widget::button::TimesClicked,
+    pub title_bar_double_click_count: u32,
 }
 
 pub struct WindowSetter {
@@ -388,6 +394,7 @@ impl<'a> WindowBuilder<'a> {
             title: "",
             initial_position: None,
             initial_size: None,
+            is_collapsed: None,
             _private: (),
         }
     }
@@ -409,6 +416,19 @@ impl<'a> WindowBuilder<'a> {
             ..self
         }
     }
+
+    /// Sets whether the window is collapsed. Note that if the collapsed status
+    /// has not been set explicitly, the `WindowingContext` will automatically
+    /// toggle the collapsed state when the collapse button is pressed or the
+    /// title bar is double-clicked. If you require explicitly setting the
+    /// collapse state of the window, you should handle these events yourself
+    /// by using the `WindowEvent` data returned by `WindowingContext::make_window`.
+    pub fn collapse(self, is_collapsed: bool) -> Self {
+        Self {
+            is_collapsed: Some(is_collapsed),
+            ..self
+        }
+    }
 }
 
 impl<'a> WindowingContext<'a> {
@@ -417,7 +437,7 @@ impl<'a> WindowingContext<'a> {
         builder: WindowBuilder,
         win_id: WinId,
         ui: &mut UiCell,
-    ) -> Option<WindowSetter> {
+    ) -> (WindowEvent, Option<WindowSetter>) {
         self.windowing_state
             .ensure_init(win_id, || layout::WindowInitialState {
                 client_size: builder.initial_size.unwrap_or_else(|| [200.0, 200.0]),
@@ -425,6 +445,9 @@ impl<'a> WindowingContext<'a> {
                 is_collapsed: false,
             });
         self.windowing_state.set_needed(win_id, true);
+        if let Some(is_collapsed) = builder.is_collapsed {
+            self.windowing_state.set_win_collapsed(win_id, is_collapsed);
+        }
         let state: &State = match ui
             .widget_graph()
             .widget(self.windowing_area_id)
@@ -432,7 +455,18 @@ impl<'a> WindowingContext<'a> {
             .map(|&conrod_core::graph::UniqueWidgetState { ref state, .. }| state)
         {
             Some(state) => state,
-            None => return None,
+            None => {
+                if cfg!(debug_assertions) {
+                    panic!("Expected to get the widget state of `WindowingArea` without fail");
+                }
+                return (
+                    WindowEvent {
+                        collapse_clicked: widget::button::TimesClicked(0),
+                        title_bar_double_click_count: 0,
+                    },
+                    None,
+                );
+            }
         };
         let win_idx = win_id.0 as usize;
         let window_frame_id = state.ids.window_frames[win_idx];
@@ -440,7 +474,9 @@ impl<'a> WindowingContext<'a> {
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
         let window_is_collapsed = self.windowing_state.win_is_collapsed(win_id);
         let conrod_window_rect = util::win_rect_to_conrod_rect(
-            self.windowing_state.win_display_rect_f64(win_id)?,
+            self.windowing_state
+                .win_display_rect_f64(win_id)
+                .expect("Window must have already been initialized"),
             self.windowing_area_rect,
         );
         let is_focused = self.windowing_state.topmost_win() == Some(win_id);
@@ -476,7 +512,12 @@ impl<'a> WindowingContext<'a> {
             })
             .filter(|&x| x)
             .count() as u32;
-        if (event.collapse_clicked.0 as u32 + title_bar_double_click_count) % 2 == 1 {
+        // Toggle the collapse state if the collapse button was pressed or the
+        // title bar was double-clicked, but only if the caller has not
+        // explicitly set the collapse state.
+        if builder.is_collapsed.is_none()
+            && (event.collapse_clicked.0 as u32 + title_bar_double_click_count) % 2 == 1
+        {
             self.windowing_state
                 .set_win_collapsed(win_id, !window_is_collapsed);
             // Since we are toggling the collapse state after the WindowFrame
@@ -486,13 +527,21 @@ impl<'a> WindowingContext<'a> {
             // else has changed in the rest of the UI during this update.
             ui.needs_redraw();
         }
+        let event = WindowEvent {
+            collapse_clicked: event.collapse_clicked,
+            title_bar_double_click_count,
+        };
         if window_is_collapsed {
-            return None;
+            (event, None)
+        } else {
+            (
+                event,
+                Some(WindowSetter {
+                    window_frame_id,
+                    content_widget_id,
+                }),
+            )
         }
-        Some(WindowSetter {
-            window_frame_id,
-            content_widget_id,
-        })
     }
 }
 
