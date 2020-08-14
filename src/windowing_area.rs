@@ -39,6 +39,14 @@ pub struct WindowingContext<'a> {
     frame_metrics: FrameMetrics,
 }
 
+#[derive(Clone, Debug)]
+pub struct WindowBuilder<'a> {
+    pub title: &'a str,
+    pub initial_position: Option<[f32; 2]>,
+    pub initial_size: Option<[f32; 2]>,
+    _private: (),
+}
+
 pub struct WindowSetter {
     window_frame_id: widget::Id,
     content_widget_id: widget::Id,
@@ -394,19 +402,46 @@ impl<'a> Widget for WindowingArea<'a> {
     }
 }
 
+impl<'a> WindowBuilder<'a> {
+    pub fn new() -> Self {
+        Self {
+            title: "",
+            initial_position: None,
+            initial_size: None,
+            _private: (),
+        }
+    }
+
+    pub fn title(self, title: &'a str) -> Self {
+        Self { title, ..self }
+    }
+
+    pub fn initial_position(self, initial_position: [f32; 2]) -> Self {
+        Self {
+            initial_position: Some(initial_position),
+            ..self
+        }
+    }
+
+    pub fn initial_size(self, initial_size: [f32; 2]) -> Self {
+        Self {
+            initial_size: Some(initial_size),
+            ..self
+        }
+    }
+}
+
 impl<'a> WindowingContext<'a> {
     pub fn make_window<'c>(
         &mut self,
-        title: &'c str,
-        initial_position: Option<[f32; 2]>,
-        initial_size: [f32; 2],
+        builder: WindowBuilder,
         win_id: WinId,
         ui: &mut UiCell,
     ) -> Option<WindowSetter> {
         self.windowing_state
             .ensure_init(win_id, || layout::WindowInitialState {
-                client_size: initial_size,
-                position: initial_position,
+                client_size: builder.initial_size.unwrap_or_else(|| [200.0, 200.0]),
+                position: builder.initial_position,
                 is_collapsed: false,
             });
         self.windowing_state.set_needed(win_id, true);
@@ -430,7 +465,7 @@ impl<'a> WindowingContext<'a> {
         );
         let is_focused = self.windowing_state.topmost_win() == Some(win_id);
         WindowFrame::new(self.frame_metrics)
-            .title(title)
+            .title(builder.title)
             .is_focused(is_focused)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
