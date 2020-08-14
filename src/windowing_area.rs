@@ -45,12 +45,14 @@ pub struct WindowBuilder<'a> {
     pub initial_position: Option<[f32; 2]>,
     pub initial_size: Option<[f32; 2]>,
     pub is_collapsible: bool,
+    pub is_closable: bool,
     pub is_collapsed: Option<bool>,
     _private: (),
 }
 
 pub struct WindowEvent {
     pub collapse_clicked: widget::button::TimesClicked,
+    pub close_clicked: widget::button::TimesClicked,
     pub title_bar_double_click_count: u32,
 }
 
@@ -396,6 +398,7 @@ impl<'a> WindowBuilder<'a> {
             initial_position: None,
             initial_size: None,
             is_collapsible: true,
+            is_closable: false,
             is_collapsed: None,
             _private: (),
         }
@@ -422,6 +425,17 @@ impl<'a> WindowBuilder<'a> {
     pub fn is_collapsible(self, is_collapsible: bool) -> Self {
         Self {
             is_collapsible,
+            ..self
+        }
+    }
+
+    /// Sets whether this window should have a close button on its frame. Note
+    /// that the close button does nothing by default and you will need to
+    /// handle the event yourself by using the `WindowEvent` data returned by
+    /// `WindowingContext::make_window`.
+    pub fn is_closable(self, is_closable: bool) -> Self {
+        Self {
+            is_closable,
             ..self
         }
     }
@@ -475,6 +489,7 @@ impl<'a> WindowingContext<'a> {
                 return (
                     WindowEvent {
                         collapse_clicked: widget::button::TimesClicked(0),
+                        close_clicked: widget::button::TimesClicked(0),
                         title_bar_double_click_count: 0,
                     },
                     None,
@@ -497,6 +512,7 @@ impl<'a> WindowingContext<'a> {
             .title(builder.title)
             .is_focused(is_focused)
             .is_collapsible(builder.is_collapsible)
+            .is_closable(builder.is_closable)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
@@ -544,6 +560,7 @@ impl<'a> WindowingContext<'a> {
         }
         let event = WindowEvent {
             collapse_clicked: event.collapse_clicked,
+            close_clicked: event.close_clicked,
             title_bar_double_click_count,
         };
         if window_is_collapsed {

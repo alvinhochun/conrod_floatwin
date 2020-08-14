@@ -20,6 +20,7 @@ pub struct WindowFrame<'a> {
     pub title: &'a str,
     pub is_focused: bool,
     pub is_collapsible: bool,
+    pub is_closable: bool,
     pub(crate) frame_metrics: FrameMetrics,
 }
 
@@ -75,6 +76,7 @@ pub struct Style {
 #[derive(Clone, Debug)]
 pub struct Event {
     pub collapse_clicked: widget::button::TimesClicked,
+    pub close_clicked: widget::button::TimesClicked,
 }
 
 widget_ids! {
@@ -84,6 +86,7 @@ widget_ids! {
         title_text_clip,
         title_text,
         button_collapse,
+        button_close,
     }
 }
 
@@ -96,6 +99,7 @@ impl<'a> WindowFrame<'a> {
             frame_metrics,
             is_focused: true,
             is_collapsible: true,
+            is_closable: false,
         }
     }
 
@@ -103,6 +107,7 @@ impl<'a> WindowFrame<'a> {
         pub title { title = &'a str }
         pub is_focused { is_focused = bool }
         pub is_collapsible { is_collapsible = bool }
+        pub is_closable { is_closable = bool }
     }
 
     pub fn frame_color(mut self, color: Color) -> Self {
@@ -156,6 +161,7 @@ impl<'a> Widget for WindowFrame<'a> {
             title,
             is_focused,
             is_collapsible,
+            is_closable,
             frame_metrics,
             ..
         } = self;
@@ -223,9 +229,26 @@ impl<'a> Widget for WindowFrame<'a> {
             widget::button::TimesClicked(0)
         };
 
+        // Close button:
+        let close_clicked = if is_closable {
+            widget::Button::new()
+                .label("x")
+                .small_font(ui)
+                .label_y(position::Relative::Align(position::Align::Middle))
+                .label_color(color::BLACK)
+                .color(color::GRAY)
+                .mid_right_with_margin_on(state.ids.title_bar_box, 2.0)
+                .w_h(button_width, button_height)
+                .parent(id)
+                .place_on_kid_area(false)
+                .set(state.ids.button_close, &mut ui)
+        } else {
+            widget::button::TimesClicked(0)
+        };
+
         // Set the clipping box for the title bar text:
         let left_padding = 6.0 + if is_collapsible { button_width } else { 0.0 };
-        let right_padding = 6.0;
+        let right_padding = 6.0 + if is_closable { button_width } else { 0.0 };
         EmptyWidget::new()
             .x_position_relative_to(
                 state.ids.title_bar_box,
@@ -255,6 +278,9 @@ impl<'a> Widget for WindowFrame<'a> {
             .place_on_kid_area(false)
             .set(state.ids.title_text, &mut ui);
 
-        Event { collapse_clicked }
+        Event {
+            collapse_clicked,
+            close_clicked,
+        }
     }
 }

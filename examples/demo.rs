@@ -244,6 +244,7 @@ fn set_widgets(
         let title = format!("Test multi - {}", i);
         let builder = WindowBuilder::new()
             .title(&title)
+            .is_closable(true)
             .initial_size([100.0, 100.0]);
         if let (_, Some(win)) = win_ctx.make_window(builder, win_id, ui) {
             let c = widget::Canvas::new()
