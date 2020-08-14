@@ -46,14 +46,18 @@ fn main() {
 
     // Instantiate the windowing state.
     let mut win_state = WindowingState::new();
-    let mut win_ids = WinIds {
+    let win_ids = WinIds {
         test1: win_state.next_id(),
         test2: win_state.next_id(),
         test_array: Vec::new(),
     };
-    let mut array_win_count = 0;
 
-    let mut enable_debug = false;
+    let mut ui_state = UiState {
+        enable_debug: false,
+        win_state,
+        win_ids,
+        array_win_count: 0,
+    };
 
     // Poll events from the window.
     let mut event_loop = support::EventLoop::new();
@@ -104,7 +108,7 @@ fn main() {
                                 ..
                             },
                         ..
-                    } => enable_debug = !enable_debug,
+                    } => ui_state.enable_debug = !ui_state.enable_debug,
                     _ => (),
                 },
                 _ => (),
@@ -115,11 +119,8 @@ fn main() {
         set_widgets(
             ui.set_widgets(),
             ids,
-            &mut win_state,
-            &mut win_ids,
-            &mut array_win_count,
             current_hidpi_factor,
-            enable_debug,
+            &mut ui_state,
         );
 
         // Get the underlying winit window and update the mouse cursor as set by conrod.
@@ -155,32 +156,39 @@ struct WinIds {
     test_array: Vec<WinId>,
 }
 
+struct UiState {
+    enable_debug: bool,
+    win_state: WindowingState,
+    win_ids: WinIds,
+    // show_test1: bool,
+    array_win_count: usize,
+}
+
 fn set_widgets(
     ref mut ui: conrod_core::UiCell,
     ids: &mut Ids,
-    win_state: &mut WindowingState,
-    win_ids: &mut WinIds,
-    array_win_count: &mut usize,
     hidpi_factor: f64,
-    enable_debug: bool,
+    state: &mut UiState,
 ) {
-    if win_ids.test_array.len() < *array_win_count {
-        win_ids
+    if state.win_ids.test_array.len() < state.array_win_count {
+        let win_state = &mut state.win_state;
+        state
+            .win_ids
             .test_array
-            .resize_with(*array_win_count, || win_state.next_id());
+            .resize_with(state.array_win_count, || win_state.next_id());
     }
     widget::Rectangle::fill(ui.window_dim())
         .color(conrod_core::color::BLUE)
         .middle()
         .set(ids.backdrop, ui);
-    let mut win_ctx: WindowingContext = WindowingArea::new(win_state, hidpi_factor)
-        .with_debug(enable_debug)
+    let mut win_ctx: WindowingContext = WindowingArea::new(&mut state.win_state, hidpi_factor)
+        .with_debug(state.enable_debug)
         .set(ids.windowing_area, ui);
     if let Some(win) = win_ctx.make_window(
         "Test1",
         Some([100.0, 100.0]),
         [150.0, 100.0],
-        win_ids.test1,
+        state.win_ids.test1,
         ui,
     ) {
         let c = widget::Canvas::new()
@@ -199,7 +207,7 @@ fn set_widgets(
         "Test2",
         Some([150.0, 150.0]),
         [200.0, 200.0],
-        win_ids.test2,
+        state.win_ids.test2,
         ui,
     ) {
         let c = widget::Canvas::new()
@@ -218,7 +226,7 @@ fn set_widgets(
             add_win += 1;
         }
     }
-    for (i, &win_id) in win_ids.test_array.iter().enumerate() {
+    for (i, &win_id) in state.win_ids.test_array.iter().enumerate() {
         let title = format!("Test multi - {}", i);
         if let Some(win) = win_ctx.make_window(&title, None, [100.0, 100.0], win_id, ui) {
             let c = widget::Canvas::new()
@@ -228,5 +236,5 @@ fn set_widgets(
             let (_container_id, _) = win.set(c, ui);
         }
     }
-    *array_win_count += add_win;
+    state.array_win_count += add_win;
 }
