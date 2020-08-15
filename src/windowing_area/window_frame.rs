@@ -169,10 +169,12 @@ impl<'a> Widget for WindowFrame<'a> {
 
         // Draw a classic frame using triangles:
         let base_color = style.frame_color(ui.theme());
-        let triangles = classic_frame::make_frame(
+        let triangles = classic_frame::make_panel_frame(
             rect.bottom_left(),
             rect.top_right(),
-            frame_metrics.border_thickness,
+            // The frame border is 4 units, but the actual panel frame border
+            // is only 2 units.
+            frame_metrics.border_thickness / 2.0,
             base_color,
         );
         widget::Triangles::multi_color(triangles)
