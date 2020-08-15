@@ -79,11 +79,19 @@ where
     })
 }
 
-pub(super) fn make_frame(
+struct FrameColor {
+    lower_a: color::Rgba,
+    upper_a: color::Rgba,
+    lower_b: color::Rgba,
+    upper_b: color::Rgba,
+    inside: color::Rgba,
+}
+
+fn make_frame(
     bottom_left: [f64; 2],
     top_right: [f64; 2],
     border_thickness: f64,
-    base_color: color::Color,
+    frame_color: FrameColor,
 ) -> impl Iterator<Item = widget::triangles::Triangle<widget::triangles::ColoredPoint>> {
     // The frame is constructed from 4 L-shapes and a rectangle, laid out as
     // follow:
@@ -97,38 +105,24 @@ pub(super) fn make_frame(
     //     | |_|________| | |
     //     |_|____________| |
     //     |________________|
-    //
-    //
-    // If we consider the thickness of the L-shapes to be 1 unit, the actual
-    // border of the frame will be 4 units.
 
-    let hsla = base_color.to_hsl();
-    let alpha = hsla.3;
+    let lower_a_color = frame_color.lower_a;
+    let upper_a_color = frame_color.upper_a;
+    let lower_b_color = frame_color.lower_b;
+    let upper_b_color = frame_color.upper_b;
+    let inside_color = frame_color.inside;
 
-    // The original colors are greyscale with luminance of:
-    //     0.0, 0.875, 0.5, 1.0, 0.75
-    // We treat the base colour as the fifth colour and scale the other colours
-    // based on the original scales --
-    //     0.875 = (1.0 - 0.75) / 2.0 + 0.75
-    //     0.5 = 0.75 / 1.5
-    let lower_a_color = color::Rgba(0.0, 0.0, 0.0, alpha);
-    let upper_a_color = color::hsla(hsla.0, hsla.1, (1.0 - hsla.2) / 2.0 + hsla.2, alpha).to_rgb();
-    let lower_b_color = color::hsla(hsla.0, hsla.1, hsla.2 / 1.5, alpha).to_rgb();
-    let upper_b_color = color::Rgba(1.0, 1.0, 1.0, alpha);
-    let inside_color = base_color.to_rgb();
-
-    let double_line_thickness = border_thickness / 2.0;
-    let line_thickness = double_line_thickness / 2.0;
+    let line_thickness = border_thickness / 2.0;
     let [x_left, y_bottom] = bottom_left;
     let [x_right, y_top] = top_right;
 
-    // Outmost (bottom-right) dark border:
+    // Outmost (bottom-right) border:
     let lower_a = polygon_to_triangle_points(
         make_l_shape_polygon([x_right, y_bottom], [x_left, y_top], line_thickness)
             .map(move |point| (point, lower_a_color)),
     );
 
-    // Outmost (top-left) light border:
+    // Outmost (top-left) border:
     let upper_a = polygon_to_triangle_points(
         make_l_shape_polygon(
             [x_left, y_top],
@@ -138,7 +132,7 @@ pub(super) fn make_frame(
         .map(move |point| (point, upper_a_color)),
     );
 
-    // Inner (bottom-right) dark border:
+    // Inner (bottom-right) border:
     let lower_b = polygon_to_triangle_points(
         make_l_shape_polygon(
             [x_right - line_thickness, y_bottom + line_thickness],
@@ -148,14 +142,11 @@ pub(super) fn make_frame(
         .map(move |point| (point, lower_b_color)),
     );
 
-    // Inner (top-left) light border:
+    // Inner (top-left) border:
     let upper_b = polygon_to_triangle_points(
         make_l_shape_polygon(
             [x_left + line_thickness, y_top - line_thickness],
-            [
-                x_right - double_line_thickness,
-                y_bottom + double_line_thickness,
-            ],
+            [x_right - border_thickness, y_bottom + border_thickness],
             line_thickness,
         )
         .map(move |point| (point, upper_b_color)),
@@ -164,19 +155,43 @@ pub(super) fn make_frame(
     // Inside rectangle:
     let inside = polygon_to_triangle_points(
         make_rect(
-            [
-                x_left + double_line_thickness,
-                y_top - double_line_thickness,
-            ],
-            [
-                x_right - double_line_thickness,
-                y_bottom + double_line_thickness,
-            ],
+            [x_left + border_thickness, y_top - border_thickness],
+            [x_right - border_thickness, y_bottom + border_thickness],
         )
         .map(move |point| (point, inside_color)),
     );
 
     iter_chain![lower_a, upper_a, lower_b, upper_b, inside].map(widget::triangles::Triangle)
+}
+
+pub(super) fn make_panel_frame(
+    bottom_left: [f64; 2],
+    top_right: [f64; 2],
+    border_thickness: f64,
+    base_color: color::Color,
+) -> impl Iterator<Item = widget::triangles::Triangle<widget::triangles::ColoredPoint>> {
+    let hsla = base_color.to_hsl();
+    let alpha = hsla.3;
+    // The original colors are greyscale with luminance of:
+    //     0.0, 0.875, 0.5, 1.0, 0.75
+    // We treat the base colour as the fifth colour and scale the other colours
+    // based on the original scales --
+    //     0.875 = (1.0 - 0.75) / 2.0 + 0.75
+    //     0.5 = 0.75 / 1.5
+    let lower_a = color::Rgba(0.0, 0.0, 0.0, alpha);
+    let upper_a = color::hsla(hsla.0, hsla.1, (1.0 - hsla.2) / 2.0 + hsla.2, alpha).to_rgb();
+    let lower_b = color::hsla(hsla.0, hsla.1, hsla.2 / 1.5, alpha).to_rgb();
+    let upper_b = color::Rgba(1.0, 1.0, 1.0, alpha);
+    let inside = base_color.to_rgb();
+    let frame_color = FrameColor {
+        lower_a,
+        upper_a,
+        lower_b,
+        upper_b,
+        inside,
+    };
+
+    make_frame(bottom_left, top_right, border_thickness, frame_color)
 }
 
 pub(super) fn make_title_bar_gradient(
