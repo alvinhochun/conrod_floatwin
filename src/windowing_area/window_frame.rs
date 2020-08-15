@@ -1,7 +1,7 @@
 use super::layout;
 use layout::FrameMetrics;
 
-use crate::empty_widget::EmptyWidget;
+use crate::{classic_frame, empty_widget::EmptyWidget};
 use conrod_core::{
     builder_methods, color,
     position::{self},
@@ -9,8 +9,6 @@ use conrod_core::{
     Sizeable, Widget, WidgetCommon, WidgetStyle,
 };
 use widget::KidAreaArgs;
-
-mod classic_frame;
 
 #[derive(WidgetCommon)]
 pub struct WindowFrame<'a> {
