@@ -78,6 +78,9 @@ pub(crate) struct FrameMetrics {
     /// The window width of a collapsed window. This includes the borders on
     /// both sides.
     pub(crate) collapsed_win_width: f64,
+    pub(crate) title_button_padding: f64,
+    pub(crate) title_button_width: f64,
+    pub(crate) title_text_padding: f64,
 }
 
 struct DraggingState {
@@ -137,19 +140,28 @@ impl FrameMetrics {
         title_bar_height = (20.0 * hidpi_factor).round() / hidpi_factor;
         collapsed_win_width =
             (150.0 * hidpi_factor + border_thickness * hidpi_factor * 2.0).round() / hidpi_factor;
+        let title_button_padding = (1.0 * hidpi_factor).round() / hidpi_factor;
+        let title_button_width = (18.0 * hidpi_factor).round() / hidpi_factor;
+        let title_text_padding = (4.0 * hidpi_factor).round() / hidpi_factor;
         eprintln!(
-            "{:?} - {:?}, {:?}, {:?}, {:?}",
+            "{:?} - {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}",
             hidpi_factor,
             border_thickness * hidpi_factor,
             title_bar_height * hidpi_factor,
             gap_below_title_bar * hidpi_factor,
             collapsed_win_width * hidpi_factor,
+            title_button_padding * hidpi_factor,
+            title_button_width * hidpi_factor,
+            title_text_padding * hidpi_factor,
         );
         dbg!(Self {
             border_thickness,
             title_bar_height,
             gap_below_title_bar,
             collapsed_win_width,
+            title_button_padding,
+            title_button_width,
+            title_text_padding,
         })
     }
 }

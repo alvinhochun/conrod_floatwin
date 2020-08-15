@@ -211,8 +211,9 @@ impl<'a> Widget for WindowFrame<'a> {
             .place_on_kid_area(false)
             .set(state.ids.title_bar_box, &mut ui);
 
-        let button_width = frame_metrics.title_bar_height - 2.0;
-        let button_height = frame_metrics.title_bar_height - 2.0;
+        let button_width = frame_metrics.title_button_width;
+        let button_height =
+            frame_metrics.title_bar_height - frame_metrics.title_button_padding * 2.0;
 
         // Collapse (minimize) button:
         let collapse_clicked = if is_collapsible {
@@ -222,7 +223,10 @@ impl<'a> Widget for WindowFrame<'a> {
                 .label_y(position::Relative::Align(position::Align::Middle))
                 .label_color(color::BLACK)
                 .color(color::GRAY)
-                .mid_left_with_margin_on(state.ids.title_bar_box, 2.0)
+                .mid_left_with_margin_on(
+                    state.ids.title_bar_box,
+                    frame_metrics.title_button_padding,
+                )
                 .w_h(button_width, button_height)
                 .parent(id)
                 .place_on_kid_area(false)
@@ -239,7 +243,10 @@ impl<'a> Widget for WindowFrame<'a> {
                 .label_y(position::Relative::Align(position::Align::Middle))
                 .label_color(color::BLACK)
                 .color(color::GRAY)
-                .mid_right_with_margin_on(state.ids.title_bar_box, 2.0)
+                .mid_right_with_margin_on(
+                    state.ids.title_bar_box,
+                    frame_metrics.title_button_padding,
+                )
                 .w_h(button_width, button_height)
                 .parent(id)
                 .place_on_kid_area(false)
@@ -249,8 +256,10 @@ impl<'a> Widget for WindowFrame<'a> {
         };
 
         // Set the clipping box for the title bar text:
-        let left_padding = 6.0 + if is_collapsible { button_width } else { 0.0 };
-        let right_padding = 6.0 + if is_closable { button_width } else { 0.0 };
+        let left_padding =
+            frame_metrics.title_text_padding + if is_collapsible { button_width } else { 0.0 };
+        let right_padding =
+            frame_metrics.title_text_padding + if is_closable { button_width } else { 0.0 };
         EmptyWidget::new()
             .x_position_relative_to(
                 state.ids.title_bar_box,
@@ -261,7 +270,7 @@ impl<'a> Widget for WindowFrame<'a> {
                 state.ids.title_bar_box,
                 (left_padding + right_padding) / 2.0,
             )
-            .padded_h_of(state.ids.title_bar_box, 2.0)
+            .h_of(state.ids.title_bar_box)
             .graphics_for(state.ids.title_bar_box)
             .place_on_kid_area(false)
             .crop_kids()
@@ -272,7 +281,7 @@ impl<'a> Widget for WindowFrame<'a> {
         widget::Text::new(title)
             .no_line_wrap()
             .left_justify()
-            .wh_of(state.ids.title_text_clip)
+            .w_of(state.ids.title_text_clip)
             .middle_of(state.ids.title_text_clip)
             .color(color::WHITE)
             .font_size(font_size)
