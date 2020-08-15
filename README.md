@@ -23,7 +23,7 @@ Licence
 This library is licenced under either of
 
 - the Apache License (Version 2.0) ([LICENSE-APACHE] or https://www.apache.org/licenses/LICENSE-2.0) or
-- the MIT license ([LICENSE-MIT] or https://www.apache.org/licenses/LICENSE-2.0)
+- the MIT license ([LICENSE-MIT])
 
 at your option.
 
