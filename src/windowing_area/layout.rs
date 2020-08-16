@@ -126,22 +126,18 @@ impl HitTest {
 
 impl FrameMetrics {
     pub(crate) fn with_hidpi_factor(hidpi_factor: f64) -> Self {
-        let border_thickness;
-        let title_bar_height;
-        let gap_below_title_bar;
-        let collapsed_win_width;
-        if hidpi_factor < 1.51 {
-            border_thickness = 4.0 / hidpi_factor;
-            gap_below_title_bar = 1.0 / hidpi_factor;
+        let dpi_int = if hidpi_factor.fract() < 0.51 {
+            hidpi_factor.trunc()
         } else {
-            border_thickness = 4.0 * hidpi_factor.round() / hidpi_factor;
-            gap_below_title_bar = 1.0 * hidpi_factor.round() / hidpi_factor;
-        }
-        title_bar_height = (20.0 * hidpi_factor).round() / hidpi_factor;
-        collapsed_win_width =
+            hidpi_factor.trunc() + 1.0
+        };
+        let border_thickness = 4.0 * dpi_int / hidpi_factor;
+        let gap_below_title_bar = 1.0 * dpi_int / hidpi_factor;
+        let title_bar_height = (18.0 * hidpi_factor).round() / hidpi_factor;
+        let collapsed_win_width =
             (150.0 * hidpi_factor + border_thickness * hidpi_factor * 2.0).round() / hidpi_factor;
-        let title_button_padding = (1.0 * hidpi_factor).round() / hidpi_factor;
-        let title_button_width = (18.0 * hidpi_factor).round() / hidpi_factor;
+        let title_button_padding = (2.0 * hidpi_factor).round() / hidpi_factor;
+        let title_button_width = (16.0 * hidpi_factor).round() / hidpi_factor;
         let title_text_padding = (4.0 * hidpi_factor).round() / hidpi_factor;
         eprintln!(
             "{:?} - {:?}, {:?}, {:?}, {:?}, {:?}, {:?}, {:?}",
