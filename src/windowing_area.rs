@@ -257,7 +257,6 @@ impl<'a> Widget for WindowingArea<'a> {
                                             ht
                                         }
                                     });
-                                eprintln!("drag start on {:?}", ht);
                                 if let Some(ht) = ht {
                                     windowing_state.win_drag_start(topmost_win_id, ht)
                                 } else {
@@ -290,7 +289,6 @@ impl<'a> Widget for WindowingArea<'a> {
                         },
                     ) => {
                         if let Some(is_dragging_window) = state.maybe_dragging_win {
-                            eprintln!("drag release");
                             if is_dragging_window {
                                 windowing_state.win_drag_end(false);
                             }
