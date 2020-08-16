@@ -37,6 +37,7 @@ pub struct WindowingContext<'a> {
     windowing_area_rect: conrod_core::Rect,
     windowing_state: &'a mut WindowingState,
     frame_metrics: FrameMetrics,
+    hidpi_factor: f64,
 }
 
 #[derive(Clone, Debug)]
@@ -379,6 +380,7 @@ impl<'a> Widget for WindowingArea<'a> {
             windowing_area_rect: rect,
             windowing_state,
             frame_metrics,
+            hidpi_factor,
         }
     }
 
@@ -508,9 +510,10 @@ impl<'a> WindowingContext<'a> {
             self.windowing_area_rect,
         );
         let is_focused = self.windowing_state.topmost_win() == Some(win_id);
-        let event = WindowFrame::new(self.frame_metrics)
+        let event = WindowFrame::new(self.frame_metrics, self.hidpi_factor)
             .title(builder.title)
             .is_focused(is_focused)
+            .is_collapsed(window_is_collapsed)
             .is_collapsible(builder.is_collapsible)
             .is_closable(builder.is_closable)
             .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))

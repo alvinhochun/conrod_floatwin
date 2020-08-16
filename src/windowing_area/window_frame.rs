@@ -1,7 +1,7 @@
 use super::layout;
 use layout::FrameMetrics;
 
-use crate::{classic_frame, empty_widget::EmptyWidget};
+use crate::{classic_button, classic_frame, empty_widget::EmptyWidget};
 use conrod_core::{
     builder_methods, color,
     position::{self},
@@ -17,9 +17,11 @@ pub struct WindowFrame<'a> {
     pub style: Style,
     pub title: &'a str,
     pub is_focused: bool,
+    pub is_collapsed: bool,
     pub is_collapsible: bool,
     pub is_closable: bool,
     pub(crate) frame_metrics: FrameMetrics,
+    pub hidpi_factor: f64,
 }
 
 pub struct State {
@@ -89,13 +91,15 @@ widget_ids! {
 }
 
 impl<'a> WindowFrame<'a> {
-    pub(crate) fn new(frame_metrics: FrameMetrics) -> Self {
+    pub(crate) fn new(frame_metrics: FrameMetrics, hidpi_factor: f64) -> Self {
         Self {
             common: widget::CommonBuilder::default(),
             style: Style::default(),
             title: "",
             frame_metrics,
+            hidpi_factor,
             is_focused: true,
+            is_collapsed: false,
             is_collapsible: true,
             is_closable: false,
         }
@@ -104,6 +108,7 @@ impl<'a> WindowFrame<'a> {
     builder_methods! {
         pub title { title = &'a str }
         pub is_focused { is_focused = bool }
+        pub is_collapsed { is_collapsed = bool }
         pub is_collapsible { is_collapsible = bool }
         pub is_closable { is_closable = bool }
     }
@@ -158,9 +163,11 @@ impl<'a> Widget for WindowFrame<'a> {
             style,
             title,
             is_focused,
+            is_collapsed,
             is_collapsible,
             is_closable,
             frame_metrics,
+            hidpi_factor,
             ..
         } = self;
         let style: Style = style;
@@ -215,12 +222,12 @@ impl<'a> Widget for WindowFrame<'a> {
 
         // Collapse (minimize) button:
         let collapse_clicked = if is_collapsible {
-            widget::Button::new()
-                .label("-")
-                .small_font(ui)
-                .label_y(position::Relative::Align(position::Align::Middle))
-                .label_color(color::BLACK)
-                .color(color::GRAY)
+            let button_type = if is_collapsed {
+                classic_button::ButtonType::Uncollapse
+            } else {
+                classic_button::ButtonType::Collapse
+            };
+            classic_button::ClassicButton::new(button_type, hidpi_factor)
                 .mid_left_with_margin_on(
                     state.ids.title_bar_box,
                     frame_metrics.title_button_padding,
@@ -235,12 +242,7 @@ impl<'a> Widget for WindowFrame<'a> {
 
         // Close button:
         let close_clicked = if is_closable {
-            widget::Button::new()
-                .label("x")
-                .small_font(ui)
-                .label_y(position::Relative::Align(position::Align::Middle))
-                .label_color(color::BLACK)
-                .color(color::GRAY)
+            classic_button::ClassicButton::new(classic_button::ButtonType::Close, hidpi_factor)
                 .mid_right_with_margin_on(
                     state.ids.title_bar_box,
                     frame_metrics.title_button_padding,
