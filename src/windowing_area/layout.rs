@@ -57,6 +57,7 @@ pub struct WindowingState {
 
 struct WindowState {
     rect: RectF,
+    min_size: dim::SizeF,
     is_collapsed: bool,
     /// This flag is used to keep track of whether the window is still being
     /// used. The method `sweep_unneeded` will remove all windows with this
@@ -67,6 +68,7 @@ struct WindowState {
 pub struct WindowInitialState {
     pub client_size: [f32; 2],
     pub position: Option<[f32; 2]>,
+    pub min_size: Option<[f32; 2]>,
     pub is_collapsed: bool,
 }
 
@@ -189,16 +191,15 @@ impl WindowingState {
         let title_bar_height = self.frame_metrics.title_bar_height as f32;
         let collapsed_win_width = self.frame_metrics.collapsed_win_width as f32;
 
-        // TODO: Make these configurable:
-        let min_w = border_thickness * 2.0 + 50.0;
-        let min_h = border_thickness * 2.0 + title_bar_height + 16.0;
-
         for &mut WindowState {
             rect: ref mut window_rect,
+            min_size,
             is_collapsed,
             ..
         } in self.window_states.iter_mut().filter_map(|x| x.as_mut())
         {
+            let min_w = border_thickness * 2.0 + min_size.w;
+            let min_h = border_thickness * 2.0 + title_bar_height + min_size.h;
             if window_rect.x <= -border_thickness {
                 window_rect.x = -border_thickness;
             } else {
@@ -249,8 +250,13 @@ impl WindowingState {
                 + self.frame_metrics.gap_below_title_bar as f32;
 
             let initial_state = init();
-            let w = initial_state.client_size[0] + double_border;
-            let h = initial_state.client_size[1] + double_border + additional_height;
+            let min_size: dim::SizeF = initial_state
+                .min_size
+                .unwrap_or_else(|| [150.0, 50.0])
+                .into();
+            let w = initial_state.client_size[0].max(min_size.w) + double_border;
+            let h =
+                initial_state.client_size[1].max(min_size.h) + double_border + additional_height;
             let next_auto_pos = &mut self.next_auto_position;
             let area_h = self.area_size[1];
             let [x, y] = initial_state.position.unwrap_or_else(|| {
@@ -265,6 +271,7 @@ impl WindowingState {
             let rect = RectF { x, y, w, h };
             *win = Some(WindowState {
                 rect,
+                min_size,
                 is_collapsed: initial_state.is_collapsed,
                 is_needed: true,
             });
@@ -478,6 +485,28 @@ impl WindowingState {
                 w: rect.w as f32 / hidpi_factor,
                 h: rect.h as f32 / hidpi_factor,
             };
+        }
+    }
+
+    pub fn set_win_min_size(&mut self, win_id: WinId, min_size: [f32; 2]) {
+        let WinId(win_idx) = win_id;
+        if let Some(win) = &mut self.window_states[win_idx as usize] {
+            let min_size: dim::SizeF = min_size.into();
+            if win.min_size.w < min_size.w || win.min_size.h < min_size.h {
+                // The new `min_size` is larger than the existing one, so we
+                // might need to expand the window.
+                let border_thickness = self.frame_metrics.border_thickness as f32;
+                let title_bar_height = self.frame_metrics.title_bar_height as f32;
+                let min_w = border_thickness * 2.0 + min_size.w;
+                let min_h = border_thickness * 2.0 + title_bar_height + min_size.h;
+                if win.rect.w < min_w {
+                    win.rect.w = min_w;
+                }
+                if win.rect.h < min_h {
+                    win.rect.h = min_h;
+                }
+            }
+            win.min_size = min_size;
         }
     }
 

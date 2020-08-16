@@ -204,7 +204,8 @@ fn set_widgets(
         .title("Test1")
         .is_collapsible(false)
         .initial_position([100.0, 100.0])
-        .initial_size([150.0, 100.0]);
+        .initial_size([150.0, 100.0])
+        .min_size([200.0, 50.0]);
     if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
