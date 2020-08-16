@@ -261,21 +261,47 @@ pub(super) fn make_close_button_icon(
     let px_width = (width * hidpi_factor).round();
     let px_height = (height * hidpi_factor).round();
     let (icon_px_width, icon_px_height) = {
-        let expected_px_height = (px_width / 8.0 * 7.0).round();
-        if px_height < expected_px_height {
-            let expected_px_width = (px_height / 7.0 * 8.0).floor();
-            (expected_px_width, (expected_px_width / 8.0 * 7.0).floor())
+        let shape_width_from_width = (px_width / 11.0 * 8.0).round();
+        let shape_height_from_width = (shape_width_from_width / 8.0 * 7.0).round();
+        let shape_height_from_height = (px_height / 9.0 * 7.0).round();
+        if shape_height_from_height < shape_height_from_width {
+            let shape_width_from_height = (shape_height_from_height / 7.0 * 8.0).round();
+            (shape_width_from_height, shape_height_from_height)
         } else {
-            ((expected_px_height / 7.0 * 8.0).round(), expected_px_height)
+            (shape_width_from_width, shape_height_from_width)
         }
     };
-    let sx = icon_px_width / 5.0;
-    let sy = sx - (icon_px_width - icon_px_height);
-
+    let icon_pad_left = ((px_width - icon_px_width) / 2.0).round() / hidpi_factor;
+    let icon_pad_bottom = ((px_height - icon_px_height) / 2.0).round() / hidpi_factor;
     let icon_width = icon_px_width / hidpi_factor;
     let icon_height = icon_px_height / hidpi_factor;
-    let sx = sx / hidpi_factor;
-    let sy = sy / hidpi_factor;
+
+    let icon_bottom_left = [x_o + icon_pad_left, y_o + icon_pad_bottom];
+    let icon_top_right = [
+        x_o + icon_pad_left + icon_width,
+        y_o + icon_pad_bottom + icon_height,
+    ];
+
+    make_close_icon_shape(icon_bottom_left, icon_top_right)
+}
+
+fn make_close_icon_shape(
+    bottom_left: [f64; 2],
+    top_right: [f64; 2],
+) -> impl Iterator<Item = widget::triangles::Triangle<conrod_core::Point>> {
+    let [x_o, y_o] = bottom_left;
+    let [x_e, y_e] = top_right;
+    let icon_width = x_e - x_o;
+    let icon_height = y_e - y_o;
+    let (sx, sy) = {
+        if icon_width > icon_height {
+            let sx = icon_width / 5.0;
+            (sx, sx - (icon_width - icon_height))
+        } else {
+            let sy = icon_height / 5.0;
+            (sy - (icon_height - icon_width), sy)
+        }
+    };
     let x_mid_offset = (icon_width / 2.0) - sx;
     let y_mid_offset = (icon_height / 2.0) - sy;
 
@@ -315,38 +341,61 @@ pub(super) fn make_uncollapse_button_icon(
     let height = y_e - y_o;
     let px_width = (width * hidpi_factor).round();
     let px_height = (height * hidpi_factor).round();
-    let (_icon_px_width, icon_px_height) = {
-        let expected_px_height = (px_width / 8.0 * 7.0).round();
-        if px_height < expected_px_height {
-            let expected_px_width = (px_height / 7.0 * 8.0).floor();
-            (expected_px_width, (expected_px_width / 8.0 * 7.0).floor())
+    let (icon_px_width, icon_px_height) = {
+        let shape_width_from_width = (px_width / 11.0 * 4.0).round();
+        let shape_height_from_width = (shape_width_from_width / 4.0 * 7.0).round();
+        let shape_height_from_height = (px_height / 9.0 * 7.0).round();
+        if shape_height_from_height < shape_height_from_width {
+            let shape_width_from_height = (shape_height_from_height / 7.0 * 4.0).round();
+            (shape_width_from_height, shape_height_from_height)
         } else {
-            ((expected_px_height / 7.0 * 8.0).round(), expected_px_height)
+            (shape_width_from_width, shape_height_from_width)
         }
     };
-    let half_height = icon_px_height / 2.0;
-    let pad_left = (half_height.round() / 2.0).round();
-    // let sx = half_height.ceil() - half_height;
-
+    let icon_pad_left = {
+        let mut pad = (px_width - icon_px_width) / 2.0;
+        let diff = icon_px_width - icon_px_height / 2.0;
+        if diff >= 1.0 {
+            // This is to prevent the icon becoming imbalanced.
+            pad += diff;
+        }
+        pad.round() / hidpi_factor
+    };
+    let icon_pad_bottom = ((px_height - icon_px_height) / 2.0).round() / hidpi_factor;
+    let icon_width = icon_px_width / hidpi_factor;
     let icon_height = icon_px_height / hidpi_factor;
-    let half_height = half_height / hidpi_factor;
-    let pad_left = pad_left / hidpi_factor;
-    // let sx = sx / hidpi_factor;
+
+    let icon_bottom_left = [x_o + icon_pad_left, y_o + icon_pad_bottom];
+    let icon_top_right = [
+        x_o + icon_pad_left + icon_width,
+        y_o + icon_pad_bottom + icon_height,
+    ];
+    make_right_arrow_icon_shape(icon_bottom_left, icon_top_right)
+}
+
+fn make_right_arrow_icon_shape(
+    bottom_left: [f64; 2],
+    top_right: [f64; 2],
+) -> impl Iterator<Item = widget::triangles::Triangle<conrod_core::Point>> {
+    let [x_o, y_o] = bottom_left;
+    let [x_e, y_e] = top_right;
+    let icon_width = x_e - x_o;
+    let icon_height = y_e - y_o;
+    let half_height = icon_height / 2.0;
+    let tip_shift_x = if icon_width < half_height {
+        icon_width
+    } else {
+        // Add a small offset to the tip so that it won't lie exactly at the
+        // middle of the pixel.
+        half_height + 0.01
+    };
 
     let triangle = [
-        [x_o + pad_left, y_o],
-        [x_o + pad_left, y_o + icon_height],
-        [x_o + pad_left + half_height, y_o + half_height],
+        [x_o, y_o],
+        [x_o, y_e],
+        [x_o + tip_shift_x, y_o + half_height],
     ];
     std::iter::once(triangle).map(widget::triangles::Triangle)
-    // let polygon = polygon_to_triangle_points(value_iter_chain![
-    //     [x_o + pad_left, y_o],
-    //     [x_o + pad_left, y_o + icon_height],
-    //     [x_o + pad_left + sx, y_o + icon_height],
-    //     [x_o + pad_left + sx + half_height, y_o + half_height],
-    //     [x_o + pad_left + sx, y_o],
-    // ]);
-    // polygon.map(widget::triangles::Triangle)
 }
 
 pub(super) fn make_collapse_button_icon(
@@ -360,28 +409,56 @@ pub(super) fn make_collapse_button_icon(
     let height = y_e - y_o;
     let px_width = (width * hidpi_factor).round();
     let px_height = (height * hidpi_factor).round();
-    let (_icon_px_width, icon_px_height) = {
-        let expected_px_height = (px_width / 8.0 * 7.0).round();
-        if px_height < expected_px_height {
-            let expected_px_width = (px_height / 7.0 * 8.0).floor();
-            (expected_px_width, (expected_px_width / 8.0 * 7.0).floor())
+    let (icon_px_width, icon_px_height) = {
+        let shape_width_from_width = (px_width / 11.0 * 7.0).round();
+        let shape_height_from_width = (shape_width_from_width / 7.0 * 4.0).round();
+        let shape_height_from_height = (px_height / 9.0 * 4.0).round();
+        if shape_height_from_height < shape_height_from_width {
+            let shape_width_from_height = (shape_height_from_height / 4.0 * 7.0).round();
+            (shape_width_from_height, shape_height_from_height)
         } else {
-            ((expected_px_height / 7.0 * 8.0).round(), expected_px_height)
+            (shape_width_from_width, shape_height_from_width)
         }
     };
-    let half_height = icon_px_height / 2.0;
-    let actual_width = icon_px_height;
-    let pad_top = (half_height.round() / 2.0).round();
-
+    let icon_pad_left = ((px_width - icon_px_width) / 2.0).round() / hidpi_factor;
+    let icon_pad_top = {
+        let mut pad = (px_height - icon_px_height) / 2.0;
+        let diff = icon_px_height - icon_px_width / 2.0;
+        if diff >= 1.0 {
+            // This is to prevent the icon becoming imbalanced.
+            pad += diff;
+        }
+        pad.round() / hidpi_factor
+    };
+    let icon_width = icon_px_width / hidpi_factor;
     let icon_height = icon_px_height / hidpi_factor;
-    let icon_width = actual_width / hidpi_factor;
-    let half_height = half_height / hidpi_factor;
-    let pad_top = pad_top / hidpi_factor;
+
+    let icon_bottom_left = [x_o + icon_pad_left, y_e - icon_pad_top - icon_height];
+    let icon_top_right = [x_o + icon_pad_left + icon_width, y_e - icon_pad_top];
+    make_down_arrow_icon_shape(icon_bottom_left, icon_top_right)
+}
+
+fn make_down_arrow_icon_shape(
+    bottom_left: [f64; 2],
+    top_right: [f64; 2],
+) -> impl Iterator<Item = widget::triangles::Triangle<conrod_core::Point>> {
+    let [x_o, y_o] = bottom_left;
+    let [x_e, y_e] = top_right;
+    let icon_width = x_e - x_o;
+    let icon_height = y_e - y_o;
+    let half_width = icon_width / 2.0;
+    let tip_shift_y = if icon_height < half_width {
+        icon_height
+    } else {
+        // Add a small offset to the tip so that it won't lie exactly at the
+        // middle of the pixel.
+        half_width + 0.01
+    };
 
     let triangle = [
-        [x_o, y_o + icon_height - pad_top],
-        [x_o + icon_width, y_o + icon_height - pad_top],
-        [x_o + half_height, y_o + icon_height - pad_top - half_height],
+        [x_o, y_e],
+        [x_e, y_e],
+        [x_o + half_width, y_e - tip_shift_y],
     ];
     std::iter::once(triangle).map(widget::triangles::Triangle)
 }
