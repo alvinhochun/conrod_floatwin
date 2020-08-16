@@ -85,17 +85,15 @@ impl Widget for ClassicButton {
             .place_on_kid_area(false)
             .set(state.frame, ui);
 
-        let icon_padding = (2.0 * hidpi_factor).round() / hidpi_factor;
-        let mut icon_rect = rect
-            .pad(border_thickness)
-            .pad_left(icon_padding)
-            .pad_right(icon_padding)
-            .pad_bottom(icon_padding);
-        if interaction == Interaction::Press {
-            let shift =
-                ((2.0 * hidpi_factor).round() - (1.0 * hidpi_factor).round()) / hidpi_factor;
-            icon_rect = icon_rect.shift_x(shift).shift_y(-shift);
-        }
+        let click_shift = 1.0 * dpi_int / hidpi_factor;
+        let icon_rect = {
+            let icon_rect = rect.pad(border_thickness);
+            if interaction == Interaction::Press {
+                icon_rect.pad_left(click_shift).pad_top(click_shift)
+            } else {
+                icon_rect.pad_right(click_shift).pad_bottom(click_shift)
+            }
+        };
         match button_type {
             ButtonType::Collapse => {
                 let icon_triangles = classic_frame::make_collapse_button_icon(
