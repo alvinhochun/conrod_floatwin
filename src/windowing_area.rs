@@ -45,6 +45,7 @@ pub struct WindowBuilder<'a> {
     pub title: &'a str,
     pub initial_position: Option<[f32; 2]>,
     pub initial_size: Option<[f32; 2]>,
+    pub min_size: Option<[f32; 2]>,
     pub is_collapsible: bool,
     pub is_closable: bool,
     pub is_collapsed: Option<bool>,
@@ -399,6 +400,7 @@ impl<'a> WindowBuilder<'a> {
             title: "",
             initial_position: None,
             initial_size: None,
+            min_size: None,
             is_collapsible: true,
             is_closable: false,
             is_collapsed: None,
@@ -420,6 +422,13 @@ impl<'a> WindowBuilder<'a> {
     pub fn initial_size(self, initial_size: [f32; 2]) -> Self {
         Self {
             initial_size: Some(initial_size),
+            ..self
+        }
+    }
+
+    pub fn min_size(self, min_size: [f32; 2]) -> Self {
+        Self {
+            min_size: Some(min_size),
             ..self
         }
     }
@@ -467,9 +476,13 @@ impl<'a> WindowingContext<'a> {
             .ensure_init(win_id, || layout::WindowInitialState {
                 client_size: builder.initial_size.unwrap_or_else(|| [200.0, 200.0]),
                 position: builder.initial_position,
+                min_size: builder.min_size,
                 is_collapsed: false,
             });
         self.windowing_state.set_needed(win_id, true);
+        if let Some(min_size) = builder.min_size {
+            self.windowing_state.set_win_min_size(win_id, min_size);
+        }
         if builder.is_collapsible {
             if let Some(is_collapsed) = builder.is_collapsed {
                 self.windowing_state.set_win_collapsed(win_id, is_collapsed);
