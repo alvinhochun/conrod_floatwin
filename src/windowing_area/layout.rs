@@ -63,6 +63,8 @@ struct WindowState {
     /// used. The method `sweep_unneeded` will remove all windows with this
     /// flag set to `false`.
     is_needed: bool,
+    anchor_x: snapping::Anchor,
+    anchor_y: snapping::Anchor,
 }
 
 pub struct WindowInitialState {
@@ -168,11 +170,78 @@ impl WindowingState {
     }
 
     pub(crate) fn set_dimensions(&mut self, area_size: [f32; 2], hidpi_factor: f64) {
+        let mut has_changed = false;
+        if self.area_size != area_size {
+            has_changed = true;
+        }
         if self.hidpi_factor != hidpi_factor {
             self.frame_metrics = FrameMetrics::with_hidpi_factor(hidpi_factor);
+            has_changed = true;
         }
         self.area_size = area_size;
         self.hidpi_factor = hidpi_factor;
+        if has_changed {
+            self.recompute_snapped_win_rects();
+        }
+    }
+
+    fn recompute_snapped_win_rects(&mut self) {
+        for i in 0..self.window_states.len() {
+            let win_id = WinId(i as u32);
+            self.win_recompute_snapping_rect(win_id);
+        }
+    }
+
+    fn win_recompute_snapping_rect(&mut self, win_id: WinId) {
+        let win_idx = win_id.0 as usize;
+        let win = match &self.window_states[win_idx] {
+            Some(win) => win,
+            None => return,
+        };
+        if win.anchor_x == snapping::Anchor::None && win.anchor_y == snapping::Anchor::None {
+            return;
+        }
+
+        let hidpi_factor = self.hidpi_factor as f32;
+        let area_w = (self.area_size[0] * hidpi_factor) as i32;
+        let area_h = (self.area_size[1] * hidpi_factor) as i32;
+        let snap_margin = (8.0 * hidpi_factor).round() as i32;
+
+        let mut rect = self
+            .win_normal_rect_int(win_id)
+            .unwrap_or_else(|| unreachable!());
+        let display_size = self
+            .win_display_rect_int(win_id)
+            .unwrap_or_else(|| unreachable!())
+            .size();
+
+        match win.anchor_x {
+            snapping::Anchor::None => {}
+            snapping::Anchor::LowerEdge => {
+                rect.x = 0 + snap_margin;
+            }
+            snapping::Anchor::UpperEdge => {
+                rect.x = area_w - display_size.w - snap_margin;
+            }
+            snapping::Anchor::LowerAndUpperEdges => {
+                rect.x = 0 + snap_margin;
+                rect.w = area_w - rect.x - snap_margin;
+            }
+        }
+        match win.anchor_y {
+            snapping::Anchor::None => {}
+            snapping::Anchor::LowerEdge => {
+                rect.y = 0 + snap_margin;
+            }
+            snapping::Anchor::UpperEdge => {
+                rect.y = area_h - display_size.h - snap_margin;
+            }
+            snapping::Anchor::LowerAndUpperEdges => {
+                rect.y = 0 + snap_margin;
+                rect.h = area_h - rect.y - snap_margin;
+            }
+        }
+        self.set_win_normal_rect_int(win_id, rect);
     }
 
     pub(crate) fn ensure_all_win_in_area(&mut self) {
@@ -263,6 +332,8 @@ impl WindowingState {
                 min_size,
                 is_collapsed: initial_state.is_collapsed,
                 is_needed: true,
+                anchor_x: snapping::Anchor::None,
+                anchor_y: snapping::Anchor::None,
             });
             self.bring_to_top(win_id);
         }
@@ -508,9 +579,20 @@ impl WindowingState {
 
     pub(crate) fn set_win_collapsed(&mut self, win_id: WinId, is_collapsed: bool) {
         let WinId(win_idx) = win_id;
-        if let Some(win) = &mut self.window_states[win_idx as usize] {
-            win.is_collapsed = is_collapsed;
+        let win = match &self.window_states[win_idx as usize] {
+            Some(win) => win,
+            None => return,
+        };
+        if win.is_collapsed == is_collapsed {
+            return;
         }
+
+        let win = self.window_states[win_idx as usize]
+            .as_mut()
+            .unwrap_or_else(|| unreachable!());
+        win.is_collapsed = is_collapsed;
+
+        self.win_recompute_snapping_rect(win_id);
     }
 
     pub fn win_z_order(&self, win_id: WinId) -> u32 {
@@ -702,10 +784,55 @@ impl WindowingState {
         if abort {
             self.set_win_normal_rect_int(win_id, starting_rect);
         } else {
-            // Round to device pixel.
-            if let Some(rect) = self.win_normal_rect(win_id) {
-                self.set_win_normal_rect(win_id, rect);
+            // Check whether the window was snapped to the area edges.
+            let rect = match self.win_normal_rect_int(win_id) {
+                Some(r) => r,
+                None => return,
+            };
+            let display_size = match self.win_display_rect_int(win_id) {
+                Some(r) => r.size(),
+                None => return,
+            };
+            let WinId(win_idx) = win_id;
+            let hidpi_factor = self.hidpi_factor as f32;
+            let snap_margin = (8.0 * hidpi_factor).round() as i32;
+            let area_size = dim::Size::from([
+                (self.area_size[0] * hidpi_factor) as i32,
+                (self.area_size[1] * hidpi_factor) as i32,
+            ]);
+
+            fn check_snap_anchor<D: dim::Dir>(
+                rect: RectI,
+                display_size: dim::SizeI,
+                area_size: dim::SizeI,
+                snap_margin: i32,
+            ) -> snapping::Anchor {
+                let pos = rect.pos().dim::<D>();
+                let is_snap_lower = pos == 0 + snap_margin;
+                let is_snap_upper =
+                    pos + display_size.dim::<D>() == area_size.dim::<D>() - snap_margin;
+                match (is_snap_lower, is_snap_upper) {
+                    (true, true) => snapping::Anchor::LowerAndUpperEdges,
+                    (true, false) => snapping::Anchor::LowerEdge,
+                    (false, true) => snapping::Anchor::UpperEdge,
+                    (false, false) => snapping::Anchor::None,
+                }
             }
+
+            let anchor_x =
+                check_snap_anchor::<dim::Horizontal>(rect, display_size, area_size, snap_margin);
+            let anchor_y =
+                check_snap_anchor::<dim::Vertical>(rect, display_size, area_size, snap_margin);
+
+            let win = match self.window_states[win_idx as usize].as_mut() {
+                Some(x) => x,
+                None => unreachable!(),
+            };
+            win.anchor_x = anchor_x;
+            win.anchor_y = anchor_y;
+
+            // Round to device pixel.
+            self.set_win_normal_rect_int(win_id, rect);
         }
     }
 
