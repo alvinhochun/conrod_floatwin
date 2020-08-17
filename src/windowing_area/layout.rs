@@ -748,10 +748,14 @@ impl WindowingState {
             h: (self.area_size[1] * hidpi_factor) as i32,
         };
 
+        let win = self.window_states[win_id.0 as usize]
+            .as_ref()
+            .unwrap_or_else(|| unreachable!());
+        let min_w = ((border_thickness * 2.0 + win.min_size.w) * hidpi_factor).round() as i32;
+        let min_h = ((border_thickness * 2.0 + title_bar_height + win.min_size.h) * hidpi_factor)
+            .round() as i32;
+
         // TODO: Make these configurable:
-        let min_w = ((border_thickness * 2.0 + 50.0) * hidpi_factor).round() as i32;
-        let min_h =
-            ((border_thickness * 2.0 + title_bar_height + 16.0) * hidpi_factor).round() as i32;
         let snap_threshold = (12.0 * hidpi_factor).round() as i32;
         let snap_margin = (8.0 * hidpi_factor).round() as i32;
 
