@@ -28,3 +28,11 @@ impl<D: Dir> SnapSegment<D> {
         self.dim_range
     }
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Anchor {
+    None,
+    LowerEdge,
+    UpperEdge,
+    LowerAndUpperEdges,
+}
