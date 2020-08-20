@@ -203,6 +203,8 @@ impl WindowingState {
         }
 
         let hidpi_factor = self.hidpi_factor as f32;
+        let border_thickness = self.frame_metrics.border_thickness as f32;
+        let title_bar_height = self.frame_metrics.title_bar_height as f32;
         let area_w = (self.area_size[0] * hidpi_factor) as i32;
         let area_h = (self.area_size[1] * hidpi_factor) as i32;
         let snap_margin = (8.0 * hidpi_factor).round() as i32;
@@ -214,6 +216,9 @@ impl WindowingState {
             .win_display_rect_int(win_id)
             .unwrap_or_else(|| unreachable!())
             .size();
+        let min_w = ((border_thickness * 2.0 + win.min_size.w) * hidpi_factor).round() as i32;
+        let min_h = ((border_thickness * 2.0 + title_bar_height + win.min_size.h) * hidpi_factor)
+            .round() as i32;
 
         match win.anchor_x {
             snapping::Anchor::None => {}
@@ -225,7 +230,7 @@ impl WindowingState {
             }
             snapping::Anchor::LowerAndUpperEdges => {
                 rect.x = 0 + snap_margin;
-                rect.w = area_w - rect.x - snap_margin;
+                rect.w = min_w.max(area_w - rect.x - snap_margin);
             }
         }
         match win.anchor_y {
@@ -238,7 +243,7 @@ impl WindowingState {
             }
             snapping::Anchor::LowerAndUpperEdges => {
                 rect.y = 0 + snap_margin;
-                rect.h = area_h - rect.y - snap_margin;
+                rect.h = min_h.max(area_h - rect.y - snap_margin);
             }
         }
         self.set_win_normal_rect_int(win_id, rect);
