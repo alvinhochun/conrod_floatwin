@@ -1,6 +1,6 @@
 [package]
 name = "conrod_floatwin"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Alvin Wong <alvinhochun@gmail.com>"]
 edition = "2018"
 
