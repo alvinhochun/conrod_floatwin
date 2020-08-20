@@ -117,12 +117,7 @@ fn main() {
         }
 
         // Instantiate all widgets in the GUI.
-        set_widgets(
-            ui.set_widgets(),
-            ids,
-            current_hidpi_factor,
-            &mut ui_state,
-        );
+        set_widgets(ui.set_widgets(), ids, current_hidpi_factor, &mut ui_state);
 
         // Get the underlying winit window and update the mouse cursor as set by conrod.
         display

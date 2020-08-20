@@ -135,7 +135,6 @@ impl<'a> Widget for DebugWidget<'a> {
                 .graphics_for(id)
                 .set(item_id, ui);
         }
-
     }
 
     fn default_x_position(&self, _ui: &Ui) -> Position {
