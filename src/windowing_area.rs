@@ -11,6 +11,7 @@ use conrod_core::{
 
 pub mod layout;
 
+mod debug;
 mod window_frame;
 
 #[derive(WidgetCommon)]
@@ -20,11 +21,12 @@ pub struct WindowingArea<'a> {
     pub style: Style,
     pub windowing_state: &'a mut WindowingState,
     pub hidpi_factor: f64,
+    pub enable_debug: bool,
 }
 
 pub struct State {
     ids: Ids,
-    maybe_drag_start_tuple: Option<(Option<layout::HitTest>, layout::Rect)>,
+    maybe_dragging_win: Option<bool>,
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, WidgetStyle)]
@@ -35,6 +37,25 @@ pub struct WindowingContext<'a> {
     windowing_area_rect: conrod_core::Rect,
     windowing_state: &'a mut WindowingState,
     frame_metrics: FrameMetrics,
+    hidpi_factor: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct WindowBuilder<'a> {
+    pub title: &'a str,
+    pub initial_position: Option<[f32; 2]>,
+    pub initial_size: Option<[f32; 2]>,
+    pub min_size: Option<[f32; 2]>,
+    pub is_collapsible: bool,
+    pub is_closable: bool,
+    pub is_collapsed: Option<bool>,
+    _private: (),
+}
+
+pub struct WindowEvent {
+    pub collapse_clicked: widget::button::TimesClicked,
+    pub close_clicked: widget::button::TimesClicked,
+    pub title_bar_double_click_count: u32,
 }
 
 pub struct WindowSetter {
@@ -48,6 +69,7 @@ widget_ids! {
         window_frames[],
         // window_titles[],
         window_contents[],
+        debug,
     }
 }
 
@@ -58,7 +80,13 @@ impl<'a> WindowingArea<'a> {
             style: Style::default(),
             windowing_state,
             hidpi_factor,
+            enable_debug: false,
         }
+    }
+
+    pub fn with_debug(mut self, enabled: bool) -> Self {
+        self.enable_debug = enabled;
+        self
     }
 }
 
@@ -70,12 +98,20 @@ impl<'a> Widget for WindowingArea<'a> {
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
             ids: Ids::new(id_gen),
-            maybe_drag_start_tuple: None,
+            maybe_dragging_win: None,
         }
     }
 
     fn style(&self) -> Self::Style {
         self.style.clone()
+    }
+
+    fn is_over(&self) -> widget::IsOverFn {
+        // We want this widget to not capture mouse events. This does not
+        // affect individual window frames as they still capture mouse events
+        // on their own. Alt+Drag window movement is handled by an overlay
+        // widget that captures mouse events so it is also not affected.
+        |_, _, _| widget::IsOver::Bool(false)
     }
 
     fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
@@ -90,6 +126,7 @@ impl<'a> Widget for WindowingArea<'a> {
         let Self {
             windowing_state,
             hidpi_factor,
+            enable_debug,
             ..
         } = self;
 
@@ -122,9 +159,9 @@ impl<'a> Widget for WindowingArea<'a> {
         if is_drag_move_window {
             // Add an empty widget on top for mouse capturing.
             EmptyWidget::new()
-                .middle_of(id)
                 .graphics_for(id)
                 .place_on_kid_area(false)
+                .xy(rect.xy())
                 .wh(rect.dim())
                 .depth(position::Depth::MIN)
                 .set(state.ids.capture_overlay, &mut ui);
@@ -149,7 +186,6 @@ impl<'a> Widget for WindowingArea<'a> {
 
         let current_input = &ui.global_input().current;
         {
-            let mut maybe_drag_start_tuple = state.maybe_drag_start_tuple;
             for event in ui.global_input().events().ui() {
                 match event {
                     conrod_core::event::Ui::Press(
@@ -186,134 +222,59 @@ impl<'a> Widget for WindowingArea<'a> {
                             windowing_state.bring_to_top(win_id);
                         }
                     }
-                    conrod_core::event::Ui::Drag(Some(drag_id), drag) => {
+                    conrod_core::event::Ui::Drag(Some(drag_id), drag)
+                        if state.maybe_dragging_win != Some(false) =>
+                    {
                         let is_self_event = || {
-                            *drag_id == id
-                                || windowing_state
-                                    .topmost_win()
-                                    .map_or(false, |WinId(top_win)| {
-                                        *drag_id == state.ids.window_frames[top_win as usize]
-                                    })
+                            *drag_id == id || {
+                                // Check whether the event widget id matches.
+                                if state.maybe_dragging_win.is_some() {
+                                    // If a window is being dragged, use it.
+                                    windowing_state
+                                        .current_dragging_win()
+                                        .map(|(win_id, _)| win_id)
+                                } else {
+                                    // Otherwise, use the topmost window.
+                                    windowing_state.topmost_win()
+                                }
+                                .map_or(false, |WinId(win)| {
+                                    *drag_id == state.ids.window_frames[win as usize]
+                                })
+                            }
                         };
                         if drag.button == conrod_core::input::MouseButton::Left && is_self_event() {
                             let topmost_win_id = windowing_state
                                 .topmost_win()
                                 .unwrap_or_else(|| unreachable!());
-                            let (drag_start_hit_test, drag_start_rect) = maybe_drag_start_tuple
-                                .unwrap_or_else(|| {
-                                    let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
-                                    let win_rect = windowing_state.win_rect(topmost_win_id);
-                                    let ht = windowing_state
-                                        .specific_win_hit_test(topmost_win_id, pos)
-                                        .map(|ht| {
-                                            if is_drag_move_window {
-                                                layout::HitTest::TitleBarOrDragArea
-                                            } else {
-                                                ht
-                                            }
-                                        });
-                                    eprintln!("drag start on {:?}", ht);
-                                    (ht, win_rect)
-                                });
-                            // TODO: Make these configurable:
-                            let min_w = frame_metrics.border_thickness as f32 * 2.0 + 50.0;
-                            let min_h = frame_metrics.border_thickness as f32 * 2.0
-                                + frame_metrics.title_bar_height as f32
-                                + 16.0;
-                            let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
-                            let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
-                            let new_rect = match drag_start_hit_test {
-                                Some(layout::HitTest::TitleBarOrDragArea) => {
-                                    let new_x = drag_start_rect.x + drag_delta_x;
-                                    let new_y = drag_start_rect.y + drag_delta_y;
-                                    layout::Rect {
-                                        x: new_x,
-                                        y: new_y,
-                                        ..drag_start_rect
-                                    }
+                            let is_dragging_win = state.maybe_dragging_win.unwrap_or_else(|| {
+                                let pos = util::conrod_point_to_layout_pos(drag.origin, rect);
+                                let ht = windowing_state
+                                    .specific_win_hit_test(topmost_win_id, pos)
+                                    .map(|ht| {
+                                        if is_drag_move_window {
+                                            layout::HitTest::TitleBarOrDragArea
+                                        } else {
+                                            ht
+                                        }
+                                    });
+                                if let Some(ht) = ht {
+                                    windowing_state.win_drag_start(topmost_win_id, ht)
+                                } else {
+                                    false
                                 }
-                                Some(layout::HitTest::TopBorder) => {
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    layout::Rect {
-                                        y: new_y,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomBorder) => {
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::LeftBorder) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    layout::Rect {
-                                        x: new_x,
-                                        w: new_w,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::RightBorder) => {
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    layout::Rect {
-                                        w: new_w,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::TopLeftCorner) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    layout::Rect {
-                                        x: new_x,
-                                        y: new_y,
-                                        w: new_w,
-                                        h: new_h,
-                                    }
-                                }
-                                Some(layout::HitTest::TopRightCorner) => {
-                                    let new_h = (drag_start_rect.h - drag_delta_y).max(min_h);
-                                    let new_y = drag_start_rect.y + (drag_start_rect.h - new_h);
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    layout::Rect {
-                                        y: new_y,
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomLeftCorner) => {
-                                    let new_w = (drag_start_rect.w - drag_delta_x).max(min_w);
-                                    let new_x = drag_start_rect.x + (drag_start_rect.w - new_w);
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        x: new_x,
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                Some(layout::HitTest::BottomRightCorner) => {
-                                    let new_w = (drag_start_rect.w + drag_delta_x).max(min_w);
-                                    let new_h = (drag_start_rect.h + drag_delta_y).max(min_h);
-                                    layout::Rect {
-                                        w: new_w,
-                                        h: new_h,
-                                        ..drag_start_rect
-                                    }
-                                }
-                                _ => drag_start_rect,
-                            };
-                            maybe_drag_start_tuple = Some((drag_start_hit_test, drag_start_rect));
-                            state.update(|state| {
-                                state.maybe_drag_start_tuple = maybe_drag_start_tuple;
                             });
-                            windowing_state.set_win_rect(topmost_win_id, new_rect);
+                            let new_is_dragging_win = if is_dragging_win {
+                                let drag_delta_x = (drag.to[0] - drag.origin[0]) as f32;
+                                let drag_delta_y = -(drag.to[1] - drag.origin[1]) as f32;
+                                windowing_state.win_drag_update([drag_delta_x, drag_delta_y])
+                            } else {
+                                false
+                            };
+                            if state.maybe_dragging_win != Some(new_is_dragging_win) {
+                                state.update(|state| {
+                                    state.maybe_dragging_win = Some(new_is_dragging_win);
+                                });
+                            }
                         }
                     }
                     conrod_core::event::Ui::Release(
@@ -327,25 +288,32 @@ impl<'a> Widget for WindowingArea<'a> {
                             ..
                         },
                     ) => {
-                        if maybe_drag_start_tuple.is_some() {
-                            eprintln!("drag release");
-                            maybe_drag_start_tuple = None;
+                        if let Some(is_dragging_window) = state.maybe_dragging_win {
+                            if is_dragging_window {
+                                windowing_state.win_drag_end(false);
+                            }
                             state.update(|state| {
-                                state.maybe_drag_start_tuple = maybe_drag_start_tuple;
+                                state.maybe_dragging_win = None;
                             });
                         }
                     }
                     _ => {}
                 }
             }
-            if maybe_drag_start_tuple.is_none() {
+            if state.maybe_dragging_win != Some(true) {
                 windowing_state.ensure_all_win_in_area();
             }
         }
 
         if let Some(cursor) = state
-            .maybe_drag_start_tuple
-            .and_then(|(ht, _)| ht)
+            .maybe_dragging_win
+            .and_then(|is_dragging| {
+                if is_dragging {
+                    windowing_state.current_dragging_win().map(|(_, ht)| ht)
+                } else {
+                    None
+                }
+            })
             .or_else(|| {
                 current_input
                     .widget_capturing_mouse
@@ -362,12 +330,14 @@ impl<'a> Widget for WindowingArea<'a> {
                                     mouse_widget == state.ids.window_frames[win_id.0 as usize]
                                 }
                             })
-                            .map(|(_, ht)| {
-                                if is_drag_move_window {
-                                    layout::HitTest::TitleBarOrDragArea
-                                } else {
-                                    ht
+                            .map(|(win_id, ht)| match ht {
+                                _ if is_drag_move_window => layout::HitTest::TitleBarOrDragArea,
+                                layout::HitTest::TitleBarOrDragArea => ht,
+                                _ if windowing_state.win_is_collapsed(win_id) => {
+                                    // Can't resize collapsed windows.
+                                    layout::HitTest::Content
                                 }
+                                _ => ht,
                             })
                     })
             })
@@ -390,11 +360,26 @@ impl<'a> Widget for WindowingArea<'a> {
         {
             ui.set_mouse_cursor(cursor);
         }
+
+        windowing_state.set_all_needed(false);
+
+        if enable_debug {
+            if let Some(win_id) = windowing_state.topmost_win() {
+                debug::DebugWidget::new(&*windowing_state, win_id, hidpi_factor)
+                    .graphics_for(id)
+                    .place_on_kid_area(false)
+                    .xy(rect.xy())
+                    .wh(rect.dim())
+                    .depth(std::f32::MIN)
+                    .set(state.ids.debug, &mut ui);
+            }
+        }
         WindowingContext {
             windowing_area_id: id,
             windowing_area_rect: rect,
             windowing_state,
             frame_metrics,
+            hidpi_factor,
         }
     }
 
@@ -407,13 +392,102 @@ impl<'a> Widget for WindowingArea<'a> {
     }
 }
 
+impl<'a> WindowBuilder<'a> {
+    pub fn new() -> Self {
+        Self {
+            title: "",
+            initial_position: None,
+            initial_size: None,
+            min_size: None,
+            is_collapsible: true,
+            is_closable: false,
+            is_collapsed: None,
+            _private: (),
+        }
+    }
+
+    pub fn title(self, title: &'a str) -> Self {
+        Self { title, ..self }
+    }
+
+    pub fn initial_position(self, initial_position: [f32; 2]) -> Self {
+        Self {
+            initial_position: Some(initial_position),
+            ..self
+        }
+    }
+
+    pub fn initial_size(self, initial_size: [f32; 2]) -> Self {
+        Self {
+            initial_size: Some(initial_size),
+            ..self
+        }
+    }
+
+    pub fn min_size(self, min_size: [f32; 2]) -> Self {
+        Self {
+            min_size: Some(min_size),
+            ..self
+        }
+    }
+
+    pub fn is_collapsible(self, is_collapsible: bool) -> Self {
+        Self {
+            is_collapsible,
+            ..self
+        }
+    }
+
+    /// Sets whether this window should have a close button on its frame. Note
+    /// that the close button does nothing by default and you will need to
+    /// handle the event yourself by using the `WindowEvent` data returned by
+    /// `WindowingContext::make_window`.
+    pub fn is_closable(self, is_closable: bool) -> Self {
+        Self {
+            is_closable,
+            ..self
+        }
+    }
+
+    /// Sets whether the window is collapsed. Note that if the collapsed status
+    /// has not been set explicitly, the `WindowingContext` will automatically
+    /// toggle the collapsed state when the collapse button is pressed or the
+    /// title bar is double-clicked. If you require explicitly setting the
+    /// collapse state of the window, you should handle these events yourself
+    /// by using the `WindowEvent` data returned by `WindowingContext::make_window`.
+    pub fn collapse(self, is_collapsed: bool) -> Self {
+        Self {
+            is_collapsed: Some(is_collapsed),
+            ..self
+        }
+    }
+}
+
 impl<'a> WindowingContext<'a> {
     pub fn make_window<'c>(
-        &self,
-        title: &'c str,
+        &mut self,
+        builder: WindowBuilder,
         win_id: WinId,
         ui: &mut UiCell,
-    ) -> Option<WindowSetter> {
+    ) -> (WindowEvent, Option<WindowSetter>) {
+        self.windowing_state
+            .ensure_init(win_id, || layout::WindowInitialState {
+                client_size: builder.initial_size.unwrap_or_else(|| [200.0, 200.0]),
+                position: builder.initial_position,
+                min_size: builder.min_size,
+                is_collapsed: false,
+            });
+        self.windowing_state.set_needed(win_id, true);
+        if let Some(min_size) = builder.min_size {
+            self.windowing_state.set_win_min_size(win_id, min_size);
+        }
+        if builder.is_collapsible {
+            if let Some(is_collapsed) = builder.is_collapsed {
+                self.windowing_state.set_win_collapsed(win_id, is_collapsed);
+            }
+        } else {
+            self.windowing_state.set_win_collapsed(win_id, false);
+        }
         let state: &State = match ui
             .widget_graph()
             .widget(self.windowing_area_id)
@@ -421,34 +495,105 @@ impl<'a> WindowingContext<'a> {
             .map(|&conrod_core::graph::UniqueWidgetState { ref state, .. }| state)
         {
             Some(state) => state,
-            None => return None,
+            None => {
+                if cfg!(debug_assertions) {
+                    panic!("Expected to get the widget state of `WindowingArea` without fail");
+                }
+                return (
+                    WindowEvent {
+                        collapse_clicked: widget::button::TimesClicked(0),
+                        close_clicked: widget::button::TimesClicked(0),
+                        title_bar_double_click_count: 0,
+                    },
+                    None,
+                );
+            }
         };
         let win_idx = win_id.0 as usize;
         let window_frame_id = state.ids.window_frames[win_idx];
         let content_widget_id = state.ids.window_contents[win_idx];
         let window_depth = -(self.windowing_state.win_z_order(win_id) as position::Depth);
-        let conrod_window_rect = {
-            let [x, y, w, h] = self.windowing_state.win_rect_f64(win_id);
-            let [left, top] = self.windowing_area_rect.top_left();
-            let x1 = left + x;
-            let y1 = top - y;
-            let x2 = left + x + w;
-            let y2 = top - y - h;
-            conrod_core::Rect::from_corners([x1, y1], [x2, y2])
-        };
-        WindowFrame::new(self.frame_metrics)
-            .title(title)
-            .frame_color(conrod_core::color::LIGHT_CHARCOAL)
+        let window_is_collapsed = self.windowing_state.win_is_collapsed(win_id);
+        let conrod_window_rect = util::win_rect_to_conrod_rect(
+            self.windowing_state
+                .win_display_rect_f64(win_id)
+                .expect("Window must have already been initialized"),
+            self.windowing_area_rect,
+        );
+        let is_focused = self.windowing_state.topmost_win() == Some(win_id);
+        let event = WindowFrame::new(self.frame_metrics, self.hidpi_factor)
+            .title(builder.title)
+            .is_focused(is_focused)
+            .is_collapsed(window_is_collapsed)
+            .is_collapsible(builder.is_collapsible)
+            .is_closable(builder.is_closable)
+            .frame_color(conrod_core::color::rgba(0.75, 0.75, 0.75, 1.0))
             .title_bar_color(conrod_core::color::LIGHT_GRAY)
             .xy(conrod_window_rect.xy())
             .wh(conrod_window_rect.dim())
             .depth(window_depth)
             .parent(self.windowing_area_id)
             .set(window_frame_id, ui);
-        Some(WindowSetter {
-            window_frame_id,
-            content_widget_id,
-        })
+
+        let title_bar_double_click_count = ui
+            .global_input()
+            .events()
+            .ui()
+            .map(|event| match event {
+                conrod_core::event::Ui::DoubleClick(
+                    Some(dblclick),
+                    conrod_core::event::DoubleClick {
+                        button: conrod_core::input::MouseButton::Left,
+                        xy,
+                        ..
+                    },
+                ) if *dblclick == window_frame_id => {
+                    let pos = util::conrod_point_to_layout_pos(*xy, self.windowing_area_rect);
+                    let ht = self.windowing_state.specific_win_hit_test(win_id, pos);
+                    ht == Some(layout::HitTest::TitleBarOrDragArea)
+                }
+                _ => false,
+            })
+            .filter(|&x| x)
+            .count() as u32;
+        // Toggle the collapse state if the collapse button was pressed or the
+        // title bar was double-clicked, but only if the caller has not
+        // explicitly set the collapse state.
+        if builder.is_collapsible
+            && builder.is_collapsed.is_none()
+            && (event.collapse_clicked.0 as u32 + title_bar_double_click_count) % 2 == 1
+        {
+            self.windowing_state
+                .set_win_collapsed(win_id, !window_is_collapsed);
+            // Since we are toggling the collapse state after the WindowFrame
+            // has already been set to the UI, the new collapse state will only
+            // be reflected on the next update. We explicitly ask the UI to
+            // redraw to make sure the next update will happen in case nothing
+            // else has changed in the rest of the UI during this update.
+            ui.needs_redraw();
+        }
+        let event = WindowEvent {
+            collapse_clicked: event.collapse_clicked,
+            close_clicked: event.close_clicked,
+            title_bar_double_click_count,
+        };
+        if window_is_collapsed {
+            (event, None)
+        } else {
+            (
+                event,
+                Some(WindowSetter {
+                    window_frame_id,
+                    content_widget_id,
+                }),
+            )
+        }
+    }
+}
+
+impl<'a> Drop for WindowingContext<'a> {
+    fn drop(&mut self) {
+        self.windowing_state.sweep_unneeded();
     }
 }
 

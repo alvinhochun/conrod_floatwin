@@ -1,8 +1,9 @@
 use super::layout;
 use layout::FrameMetrics;
 
+use crate::{classic_button, classic_frame, empty_widget::EmptyWidget};
 use conrod_core::{
-    builder_methods,
+    builder_methods, color,
     position::{self},
     text, widget, widget_ids, Borderable, Color, Colorable, FontSize, Labelable, Positionable,
     Sizeable, Widget, WidgetCommon, WidgetStyle,
@@ -15,7 +16,12 @@ pub struct WindowFrame<'a> {
     pub common: widget::CommonBuilder,
     pub style: Style,
     pub title: &'a str,
+    pub is_focused: bool,
+    pub is_collapsed: bool,
+    pub is_collapsible: bool,
+    pub is_closable: bool,
     pub(crate) frame_metrics: FrameMetrics,
+    pub hidpi_factor: f64,
 }
 
 pub struct State {
@@ -67,25 +73,44 @@ pub struct Style {
     pub title_bar_justify: Option<text::Justify>,
 }
 
+#[derive(Clone, Debug)]
+pub struct Event {
+    pub collapse_clicked: widget::button::TimesClicked,
+    pub close_clicked: widget::button::TimesClicked,
+}
+
 widget_ids! {
     struct Ids {
         frame,
-        title_bar,
+        title_bar_box,
+        title_text_clip,
+        title_text,
+        button_collapse,
+        button_close,
     }
 }
 
 impl<'a> WindowFrame<'a> {
-    pub(crate) fn new(frame_metrics: FrameMetrics) -> Self {
+    pub(crate) fn new(frame_metrics: FrameMetrics, hidpi_factor: f64) -> Self {
         Self {
             common: widget::CommonBuilder::default(),
             style: Style::default(),
             title: "",
             frame_metrics,
+            hidpi_factor,
+            is_focused: true,
+            is_collapsed: false,
+            is_collapsible: true,
+            is_closable: false,
         }
     }
 
     builder_methods! {
         pub title { title = &'a str }
+        pub is_focused { is_focused = bool }
+        pub is_collapsed { is_collapsed = bool }
+        pub is_collapsible { is_collapsible = bool }
+        pub is_closable { is_closable = bool }
     }
 
     pub fn frame_color(mut self, color: Color) -> Self {
@@ -102,7 +127,7 @@ impl<'a> WindowFrame<'a> {
 impl<'a> Widget for WindowFrame<'a> {
     type State = State;
     type Style = Style;
-    type Event = ();
+    type Event = Event;
 
     fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
         State {
@@ -137,44 +162,136 @@ impl<'a> Widget for WindowFrame<'a> {
         let Self {
             style,
             title,
+            is_focused,
+            is_collapsed,
+            is_collapsible,
+            is_closable,
             frame_metrics,
+            hidpi_factor,
             ..
         } = self;
         let style: Style = style;
 
-        // Rectangle for the window frame (the content is paint over it).
-        widget::Rectangle::fill_with(rect.dim(), style.frame_color(ui.theme()))
+        // Draw a classic frame using triangles:
+        let base_color = style.frame_color(ui.theme());
+        let triangles = classic_frame::make_panel_frame(
+            rect.bottom_left(),
+            rect.top_right(),
+            // The frame border is 4 units, but the actual panel frame border
+            // is only 2 units.
+            frame_metrics.border_thickness / 2.0,
+            base_color,
+        );
+        widget::Triangles::multi_color(triangles)
+            .with_bounding_rect(rect)
             .middle_of(id)
             .graphics_for(id)
             .place_on_kid_area(false)
             .set(state.ids.frame, &mut ui);
 
-        // TitleBar widget.
-        {
-            let color = style.title_bar_color(&ui.theme);
-            let font_size = style.title_bar_font_size(&ui.theme);
-            let label_color = style.title_bar_text_color(&ui.theme);
-            let justify = style.title_bar_justify(&ui.theme);
-            widget::TitleBar::new(title, state.ids.frame)
-                .and_mut(|title_bar| {
-                    title_bar.style.maybe_wrap = Some(None);
-                    title_bar.style.justify = Some(justify);
-                })
-                .color(color)
-                .border(0.0)
-                .label_font_size(font_size)
-                .label_color(label_color)
-                .y_position_relative_to(
-                    id,
-                    position::Relative::Place(position::Place::End(Some(
-                        frame_metrics.border_thickness,
-                    ))),
+        let left = rect.pad_left(frame_metrics.border_thickness).left();
+        let right = rect.pad_right(frame_metrics.border_thickness).right();
+        let top = rect.pad_top(frame_metrics.border_thickness).top();
+        let bottom = top - frame_metrics.title_bar_height;
+        let title_bar_rect = conrod_core::Rect::from_corners([left, bottom], [right, top]);
+
+        // Draw a title bar rect:
+        let (color_left, color_right);
+        if is_focused {
+            color_left = color::rgba(0.0, 0.0, 0.5, 1.0);
+            color_right = color::rgba(0.05, 0.5, 0.8, 1.0);
+        } else {
+            color_left = color::rgba(0.5, 0.5, 0.5, 1.0);
+            color_right = color::rgba(0.7, 0.7, 0.7, 1.0);
+        }
+        let triangles = classic_frame::make_title_bar_gradient(
+            title_bar_rect.bottom_left(),
+            title_bar_rect.top_right(),
+            color_left,
+            color_right,
+        );
+        widget::Triangles::multi_color(triangles)
+            .with_bounding_rect(title_bar_rect)
+            .graphics_for(id)
+            .place_on_kid_area(false)
+            .set(state.ids.title_bar_box, &mut ui);
+
+        let button_width = frame_metrics.title_button_width;
+        let button_height =
+            frame_metrics.title_bar_height - frame_metrics.title_button_padding * 2.0;
+
+        // Collapse (minimize) button:
+        let collapse_clicked = if is_collapsible {
+            let button_type = if is_collapsed {
+                classic_button::ButtonType::Uncollapse
+            } else {
+                classic_button::ButtonType::Collapse
+            };
+            classic_button::ClassicButton::new(button_type, hidpi_factor)
+                .mid_left_with_margin_on(
+                    state.ids.title_bar_box,
+                    frame_metrics.title_button_padding,
                 )
-                .w(rect.w() - frame_metrics.border_thickness * 2.0)
-                .h(frame_metrics.title_bar_height)
-                .graphics_for(id)
+                .w_h(button_width, button_height)
+                .parent(id)
                 .place_on_kid_area(false)
-                .set(state.ids.title_bar, &mut ui);
+                .set(state.ids.button_collapse, &mut ui)
+        } else {
+            widget::button::TimesClicked(0)
+        };
+
+        // Close button:
+        let close_clicked = if is_closable {
+            classic_button::ClassicButton::new(classic_button::ButtonType::Close, hidpi_factor)
+                .mid_right_with_margin_on(
+                    state.ids.title_bar_box,
+                    frame_metrics.title_button_padding,
+                )
+                .w_h(button_width, button_height)
+                .parent(id)
+                .place_on_kid_area(false)
+                .set(state.ids.button_close, &mut ui)
+        } else {
+            widget::button::TimesClicked(0)
+        };
+
+        // Set the clipping box for the title bar text:
+        let left_padding =
+            frame_metrics.title_text_padding + if is_collapsible { button_width } else { 0.0 };
+        let right_padding =
+            frame_metrics.title_text_padding + if is_closable { button_width } else { 0.0 };
+        EmptyWidget::new()
+            .x_position_relative_to(
+                state.ids.title_bar_box,
+                position::Relative::Place(position::Place::Start(Some(left_padding))),
+            )
+            .align_middle_y_of(state.ids.title_bar_box)
+            .padded_w_of(
+                state.ids.title_bar_box,
+                (left_padding + right_padding) / 2.0,
+            )
+            .h_of(state.ids.title_bar_box)
+            .graphics_for(state.ids.title_bar_box)
+            .place_on_kid_area(false)
+            .crop_kids()
+            .set(state.ids.title_text_clip, &mut ui);
+
+        // Draw the title bar text:
+        let font_size = style.title_bar_font_size(&ui.theme);
+        widget::Text::new(title)
+            .no_line_wrap()
+            .left_justify()
+            .w_of(state.ids.title_text_clip)
+            .middle_of(state.ids.title_text_clip)
+            .color(color::WHITE)
+            .font_size(font_size)
+            .graphics_for(state.ids.title_text_clip)
+            .place_on_kid_area(false)
+            .set(state.ids.title_text, &mut ui);
+
+        Event {
+            collapse_clicked,
+            close_clicked,
         }
     }
 }

@@ -3,7 +3,7 @@ use conrod_core::{
 };
 use conrod_floatwin::windowing_area::{
     layout::{WinId, WindowingState},
-    WindowingArea, WindowingContext,
+    WindowBuilder, WindowingArea, WindowingContext,
 };
 use glium::Surface;
 
@@ -46,12 +46,19 @@ fn main() {
 
     // Instantiate the windowing state.
     let mut win_state = WindowingState::new();
-    let mut win_ids = WinIds {
-        test1: win_state.add(100.0, 100.0, 150.0, 100.0),
-        test2: win_state.add(150.0, 150.0, 200.0, 200.0),
-        test_array: Vec::new(),
+    let win_ids = WinIds {
+        test1: win_state.next_id(),
+        test2: win_state.next_id(),
     };
-    let mut array_win_count = 0;
+
+    let mut ui_state = UiState {
+        enable_debug: false,
+        win_state,
+        win_ids,
+        array_wins: vec![],
+        reusable_win_ids: vec![],
+        next_array_win_idx: 1,
+    };
 
     // Poll events from the window.
     let mut event_loop = support::EventLoop::new();
@@ -79,6 +86,30 @@ fn main() {
                     glium::glutin::WindowEvent::HiDpiFactorChanged(hidpi_factor) => {
                         current_hidpi_factor = hidpi_factor;
                     }
+                    // Toggle fullscreen on `F11`.
+                    glium::glutin::WindowEvent::KeyboardInput {
+                        input:
+                            glium::glutin::KeyboardInput {
+                                virtual_keycode: Some(glium::glutin::VirtualKeyCode::F11),
+                                state: glium::glutin::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => match display.0.gl_window().window().get_fullscreen() {
+                        Some(_) => display.0.gl_window().window().set_fullscreen(None),
+                        None => display.0.gl_window().window().set_fullscreen(Some(
+                            display.0.gl_window().window().get_current_monitor(),
+                        )),
+                    },
+                    glium::glutin::WindowEvent::KeyboardInput {
+                        input:
+                            glium::glutin::KeyboardInput {
+                                virtual_keycode: Some(glium::glutin::VirtualKeyCode::F12),
+                                state: glium::glutin::ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    } => ui_state.enable_debug = !ui_state.enable_debug,
                     _ => (),
                 },
                 _ => (),
@@ -86,14 +117,7 @@ fn main() {
         }
 
         // Instantiate all widgets in the GUI.
-        set_widgets(
-            ui.set_widgets(),
-            ids,
-            &mut win_state,
-            &mut win_ids,
-            &mut array_win_count,
-            current_hidpi_factor,
-        );
+        set_widgets(ui.set_widgets(), ids, current_hidpi_factor, &mut ui_state);
 
         // Get the underlying winit window and update the mouse cursor as set by conrod.
         display
@@ -125,29 +149,42 @@ widget_ids! {
 struct WinIds {
     test1: WinId,
     test2: WinId,
-    test_array: Vec<WinId>,
+}
+
+struct UiState {
+    enable_debug: bool,
+    win_state: WindowingState,
+    win_ids: WinIds,
+    array_wins: Vec<ArrayWinState>,
+    reusable_win_ids: Vec<WinId>,
+    next_array_win_idx: usize,
+}
+
+struct ArrayWinState {
+    index: usize,
+    win_id: WinId,
 }
 
 fn set_widgets(
     ref mut ui: conrod_core::UiCell,
     ids: &mut Ids,
-    win_state: &mut WindowingState,
-    win_ids: &mut WinIds,
-    array_win_count: &mut usize,
     hidpi_factor: f64,
+    state: &mut UiState,
 ) {
-    if win_ids.test_array.len() < *array_win_count {
-        win_ids.test_array.resize_with(*array_win_count, || {
-            win_state.add(150.0, 120.0, 100.0, 100.0)
-        });
-    }
     widget::Rectangle::fill(ui.window_dim())
-        .color(conrod_core::color::LIGHT_GREY)
+        .color(conrod_core::color::BLUE)
         .middle()
         .set(ids.backdrop, ui);
-    let win_ctx: WindowingContext =
-        WindowingArea::new(win_state, hidpi_factor).set(ids.windowing_area, ui);
-    if let Some(win) = win_ctx.make_window("Test1", win_ids.test1, ui) {
+    let mut win_ctx: WindowingContext = WindowingArea::new(&mut state.win_state, hidpi_factor)
+        .with_debug(state.enable_debug)
+        .set(ids.windowing_area, ui);
+    let builder = WindowBuilder::new()
+        .title("Test1")
+        .is_collapsible(false)
+        .initial_position([100.0, 100.0])
+        .initial_size([150.0, 100.0])
+        .min_size([200.0, 50.0]);
+    if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test1, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_YELLOW)
@@ -160,7 +197,11 @@ fn set_widgets(
             .set(ids.text, ui);
     }
     let mut add_win = 0;
-    if let Some(win) = win_ctx.make_window("Test2", win_ids.test2, ui) {
+    let builder = WindowBuilder::new()
+        .title("Test2")
+        .initial_position([150.0, 150.0])
+        .initial_size([200.0, 200.0]);
+    if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test2, ui) {
         let c = widget::Canvas::new()
             .border(0.0)
             .color(conrod_core::color::LIGHT_BLUE)
@@ -177,15 +218,56 @@ fn set_widgets(
             add_win += 1;
         }
     }
-    for (i, &win_id) in win_ids.test_array.iter().enumerate() {
-        let title = format!("Test multi - {}", i);
-        if let Some(win) = win_ctx.make_window(&title, win_id, ui) {
+    let mut array_win_to_close = vec![];
+    for (i, array_win_state) in state.array_wins.iter().enumerate() {
+        let title = format!("Test multi - {}", array_win_state.index);
+        let builder = WindowBuilder::new()
+            .title(&title)
+            .is_closable(true)
+            .initial_size([150.0, 100.0]);
+        let (event, win) = win_ctx.make_window(builder, array_win_state.win_id, ui);
+        if let Some(win) = win {
             let c = widget::Canvas::new()
                 .border(0.0)
                 .color(conrod_core::color::LIGHT_CHARCOAL)
                 .scroll_kids();
             let (_container_id, _) = win.set(c, ui);
         }
+        if event.close_clicked.was_clicked() {
+            array_win_to_close.push(i);
+        }
     }
-    *array_win_count += add_win;
+
+    // Since `WindowingContext` borrows our `WindowingState`, we can't use it
+    // to get `WinId`s unless it has been dropped. Other than calling
+    // `std::mem::drop`, one can also wrap the above code in a scope using
+    // curly braces `{` and `}` so that the `WindowingContext` gets dropped
+    // at the end of the scope. Putting it in a function also works.
+    std::mem::drop(win_ctx);
+
+    // Create new windows, getting new `WinId`s if necessary.
+    while add_win > 0 {
+        let win_state = &mut state.win_state;
+        // Reuse an existing `WinId` if available or get a new `WinId`.
+        let win_id = state
+            .reusable_win_ids
+            .pop()
+            .unwrap_or_else(|| win_state.next_id());
+        state.array_wins.push(ArrayWinState {
+            index: state.next_array_win_idx,
+            win_id,
+        });
+        state.next_array_win_idx += 1;
+        add_win -= 1;
+    }
+
+    // Remove the windows to be closed. Note that we do this *after* creating
+    // new windows, because the windows are only destroyed after the next
+    // iteration and we don't want new windows to re-use the leftover states of
+    // these windows which are yet to be destroyed.
+    for i in array_win_to_close.into_iter().rev() {
+        let s = state.array_wins.swap_remove(i);
+        // We want to be able to reuse the `WinId`.
+        state.reusable_win_ids.push(s.win_id);
+    }
 }
