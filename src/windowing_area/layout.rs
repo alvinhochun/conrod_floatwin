@@ -261,30 +261,25 @@ impl WindowingState {
             ..
         } in self.window_states.iter_mut().filter_map(|x| x.as_mut())
         {
-            let min_w = border_thickness * 2.0 + min_size.w;
-            let min_h = border_thickness * 2.0 + title_bar_height + min_size.h;
-            if window_rect.x <= -border_thickness {
-                window_rect.x = -border_thickness;
+            let width_to_test = if is_collapsed {
+                collapsed_win_width - border_thickness
             } else {
-                let width_to_test = if is_collapsed {
-                    collapsed_win_width - border_thickness
-                } else {
-                    window_rect.w - border_thickness
-                };
-                if window_rect.x + width_to_test > self.area_size[0] {
-                    window_rect.x = self.area_size[0] - width_to_test;
-                }
-            }
-            if !is_collapsed && window_rect.w > self.area_size[0] + border_thickness * 2.0 {
-                window_rect.w = min_w.max(self.area_size[0] + border_thickness * 2.0);
+                collapsed_win_width.min(window_rect.w) - border_thickness
+            };
+            let display_width = if is_collapsed {
+                collapsed_win_width
+            } else {
+                window_rect.w
+            };
+            if window_rect.x <= width_to_test - display_width - border_thickness {
+                window_rect.x = width_to_test - display_width - border_thickness;
+            } else if window_rect.x > self.area_size[0] - width_to_test {
+                window_rect.x = self.area_size[0] - width_to_test;
             }
             if window_rect.y <= -border_thickness {
                 window_rect.y = -border_thickness;
-            } else if window_rect.y + border_thickness + title_bar_height > self.area_size[1] {
+            } else if window_rect.y > self.area_size[1] - (border_thickness + title_bar_height) {
                 window_rect.y = self.area_size[1] - (border_thickness + title_bar_height);
-            }
-            if !is_collapsed && window_rect.h > self.area_size[1] + border_thickness * 2.0 {
-                window_rect.h = min_h.max(self.area_size[1] + border_thickness * 2.0);
             }
         }
     }
