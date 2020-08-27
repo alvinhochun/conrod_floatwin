@@ -10,7 +10,7 @@ repository = "https://github.com/alvinhochun/conrod_floatwin"
 readme = "README.md"
 categories = ["gui", "graphics"]
 
-exclude = ["/images/"]
+exclude = ["/assets/", "/images/"]
 
 [dependencies]
 conrod_core = ">=0.69"
