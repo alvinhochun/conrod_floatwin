@@ -154,6 +154,9 @@ impl<'a> Widget for WindowingArea<'a> {
             position::Rect::from_corners([sl - half_w, sb - half_h], [sr - half_w, st - half_h])
         };
 
+        // Remove the windows that weren't used in the last iteration.
+        windowing_state.sweep_unneeded();
+
         let is_drag_move_window =
             ui.global_input().current.modifiers == conrod_core::input::ModifierKey::ALT;
         if is_drag_move_window {
@@ -588,12 +591,6 @@ impl<'a> WindowingContext<'a> {
                 }),
             )
         }
-    }
-}
-
-impl<'a> Drop for WindowingContext<'a> {
-    fn drop(&mut self) {
-        self.windowing_state.sweep_unneeded();
     }
 }
 
