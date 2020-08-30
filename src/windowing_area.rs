@@ -361,6 +361,8 @@ impl<'a> Widget for WindowingArea<'a> {
             ui.set_mouse_cursor(cursor);
         }
 
+        windowing_state.set_all_needed(false);
+
         if enable_debug {
             if let Some(win_id) = windowing_state.topmost_win() {
                 debug::DebugWidget::new(&*windowing_state, win_id, hidpi_factor)
@@ -475,6 +477,7 @@ impl<'a> WindowingContext<'a> {
                 min_size: builder.min_size,
                 is_collapsed: false,
             });
+        self.windowing_state.set_needed(win_id, true);
         if let Some(min_size) = builder.min_size {
             self.windowing_state.set_win_min_size(win_id, min_size);
         }
@@ -585,6 +588,12 @@ impl<'a> WindowingContext<'a> {
                 }),
             )
         }
+    }
+}
+
+impl<'a> Drop for WindowingContext<'a> {
+    fn drop(&mut self) {
+        self.windowing_state.sweep_unneeded();
     }
 }
 
