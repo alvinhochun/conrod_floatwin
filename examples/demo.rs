@@ -57,6 +57,7 @@ fn main() {
         array_wins: vec![],
         reusable_win_ids: vec![],
         next_array_win_idx: 1,
+        hide_test2: false,
     };
 
     // Poll events from the window.
@@ -142,6 +143,7 @@ widget_ids! {
         windowing_area,
         text,
         button,
+        toggle,
     }
 }
 
@@ -157,6 +159,7 @@ struct UiState {
     array_wins: Vec<ArrayWinState>,
     reusable_win_ids: Vec<WinId>,
     next_array_win_idx: usize,
+    hide_test2: bool,
 }
 
 struct ArrayWinState {
@@ -194,10 +197,19 @@ fn set_widgets(
             .font_size(32)
             .parent(container_id)
             .set(ids.text, ui);
+        let clicked = widget::Toggle::new(state.hide_test2)
+            .label(if state.hide_test2 { "Test2:\nHidden" } else { "Test2:\nShown" })
+            .label_color(conrod_core::color::LIGHT_BLUE)
+            .w_h(100.0, 50.0)
+            .up(8.0)
+            .parent(container_id)
+            .set(ids.toggle, ui);
+        state.hide_test2 = clicked.last().unwrap_or(state.hide_test2);
     }
     let mut add_win = 0;
     let builder = WindowBuilder::new()
         .title("Test2")
+        .is_hidden(state.hide_test2)
         .initial_position([150.0, 150.0])
         .initial_size([200.0, 200.0]);
     if let (_, Some(win)) = win_ctx.make_window(builder, state.win_ids.test2, ui) {

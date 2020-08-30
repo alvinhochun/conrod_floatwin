@@ -58,6 +58,7 @@ pub struct WindowingState {
 struct WindowState {
     rect: RectF,
     min_size: dim::SizeF,
+    is_hidden: bool,
     is_collapsed: bool,
     /// This flag is used to keep track of whether the window is still being
     /// used. The method `sweep_unneeded` will remove all windows with this
@@ -198,6 +199,9 @@ impl WindowingState {
             Some(win) => win,
             None => return,
         };
+        if win.is_hidden {
+            return;
+        }
         if win.anchor_x == snapping::Anchor::None && win.anchor_y == snapping::Anchor::None {
             return;
         }
@@ -257,10 +261,14 @@ impl WindowingState {
         for &mut WindowState {
             rect: ref mut window_rect,
             min_size,
+            is_hidden,
             is_collapsed,
             ..
         } in self.window_states.iter_mut().filter_map(|x| x.as_mut())
         {
+            if is_hidden {
+                continue;
+            }
             let width_to_test = if is_collapsed {
                 collapsed_win_width - border_thickness
             } else {
@@ -330,6 +338,7 @@ impl WindowingState {
             *win = Some(WindowState {
                 rect,
                 min_size,
+                is_hidden: false,
                 is_collapsed: initial_state.is_collapsed,
                 is_needed: true,
                 anchor_x: snapping::Anchor::None,
@@ -392,6 +401,9 @@ impl WindowingState {
     pub fn specific_win_hit_test(&self, win_id: WinId, pos: [f32; 2]) -> Option<HitTest> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
+        if win.is_hidden {
+            return None;
+        }
         let is_collapsed = win.is_collapsed;
         let win_rect = if is_collapsed {
             self.win_display_rect(win_id)?
@@ -465,6 +477,9 @@ impl WindowingState {
     pub fn win_display_rect(&self, win_id: WinId) -> Option<RectF> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
+        if win.is_hidden {
+            return None;
+        }
         if win.is_collapsed {
             let rect = win.rect;
             let hidpi_factor = self.hidpi_factor as f32;
@@ -487,6 +502,9 @@ impl WindowingState {
     pub fn win_display_rect_int(&self, win_id: WinId) -> Option<RectI> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
+        if win.is_hidden {
+            return None;
+        }
         if win.is_collapsed {
             let rect = win.rect;
             let hidpi_factor = self.hidpi_factor as f32;
@@ -511,6 +529,9 @@ impl WindowingState {
     pub fn win_display_rect_f64(&self, win_id: WinId) -> Option<[f64; 4]> {
         let WinId(win_idx) = win_id;
         let win = self.window_states[win_idx as usize].as_ref()?;
+        if win.is_hidden {
+            return None;
+        }
         if win.is_collapsed {
             let rect = win.rect;
             let hidpi_factor = self.hidpi_factor;
@@ -568,6 +589,31 @@ impl WindowingState {
             }
             win.min_size = min_size;
         }
+    }
+
+    pub fn win_is_hidden(&self, win_id: WinId) -> bool {
+        let WinId(win_idx) = win_id;
+        self.window_states[win_idx as usize]
+            .as_ref()
+            .map_or(true, |x| x.is_hidden)
+    }
+
+    pub(crate) fn set_win_hidden(&mut self, win_id: WinId, is_hidden: bool) {
+        let WinId(win_idx) = win_id;
+        let win = match &self.window_states[win_idx as usize] {
+            Some(win) => win,
+            None => return,
+        };
+        if win.is_hidden == is_hidden {
+            return;
+        }
+
+        let win = self.window_states[win_idx as usize]
+            .as_mut()
+            .unwrap_or_else(|| unreachable!());
+        win.is_hidden = is_hidden;
+
+        self.win_recompute_snapping_rect(win_id);
     }
 
     pub fn win_is_collapsed(&self, win_id: WinId) -> bool {

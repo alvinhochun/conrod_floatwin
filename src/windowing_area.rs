@@ -46,6 +46,7 @@ pub struct WindowBuilder<'a> {
     pub initial_position: Option<[f32; 2]>,
     pub initial_size: Option<[f32; 2]>,
     pub min_size: Option<[f32; 2]>,
+    pub is_hidden: bool,
     pub is_collapsible: bool,
     pub is_closable: bool,
     pub is_collapsed: Option<bool>,
@@ -402,6 +403,7 @@ impl<'a> WindowBuilder<'a> {
             initial_position: None,
             initial_size: None,
             min_size: None,
+            is_hidden: false,
             is_collapsible: true,
             is_closable: false,
             is_collapsed: None,
@@ -432,6 +434,10 @@ impl<'a> WindowBuilder<'a> {
             min_size: Some(min_size),
             ..self
         }
+    }
+
+    pub fn is_hidden(self, is_hidden: bool) -> Self {
+        Self { is_hidden, ..self }
     }
 
     pub fn is_collapsible(self, is_collapsible: bool) -> Self {
@@ -491,6 +497,19 @@ impl<'a> WindowingContext<'a> {
         } else {
             self.windowing_state.set_win_collapsed(win_id, false);
         }
+        self.windowing_state
+            .set_win_hidden(win_id, builder.is_hidden);
+        if builder.is_hidden {
+            return (
+                WindowEvent {
+                    collapse_clicked: widget::button::TimesClicked(0),
+                    close_clicked: widget::button::TimesClicked(0),
+                    title_bar_double_click_count: 0,
+                },
+                None,
+            );
+        }
+
         let state: &State = match ui
             .widget_graph()
             .widget(self.windowing_area_id)
